@@ -1,0 +1,1480 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Трекер метрик</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f8fafc; --surface: #ffffff; --border: #e2e8f0;
+    --text: #1e293b; --muted: #64748b; --accent: #2563eb;
+    --accent-light: #eff6ff; --success-bg: #f0fdf4; --success: #16a34a;
+    --warn-bg: #fffbeb; --warn: #d97706; --err-bg: #fef2f2; --err: #dc2626;
+    --radius: 10px; --radius-sm: 6px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg); color: var(--text); font-size: 14px; min-height: 100vh; }
+
+  /* Layout */
+  .app { display: flex; min-height: 100vh; }
+  .sidebar { width: 220px; background: #1e293b; color: #e2e8f0; flex-shrink: 0;
+    display: flex; flex-direction: column; }
+  .sidebar-logo { padding: 20px 16px 16px; border-bottom: 1px solid #334155; }
+  .sidebar-logo h1 { font-size: 15px; font-weight: 600; color: #f1f5f9; line-height: 1.3; }
+  .sidebar-logo p { font-size: 11px; color: #94a3b8; margin-top: 3px; }
+  .sidebar-nav { padding: 12px 8px; flex: 1; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px;
+    border-radius: var(--radius-sm); cursor: pointer; color: #94a3b8;
+    font-size: 13px; transition: all .15s; margin-bottom: 2px; }
+  .nav-item:hover { background: #334155; color: #f1f5f9; }
+  .nav-item.active { background: #2563eb; color: #fff; }
+  .nav-icon { font-size: 16px; width: 18px; text-align: center; }
+  .sidebar-week { padding: 12px; border-top: 1px solid #334155; }
+  .sidebar-week label { font-size: 11px; color: #94a3b8; display: block; margin-bottom: 6px; }
+  .sidebar-week input { width: 100%; padding: 6px 8px; border-radius: var(--radius-sm);
+    border: 1px solid #334155; background: #0f172a; color: #f1f5f9; font-size: 13px; }
+
+  /* Main */
+  .main { flex: 1; overflow-y: auto; }
+  .page { display: none; padding: 24px; max-width: 900px; }
+  .page.active { display: block; }
+  .page-title { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .page-sub { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+
+  /* Cards */
+  .card { background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+  .card-title { font-size: 13px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .05em; margin-bottom: 14px; }
+
+  /* Form */
+  .form-grid { display: grid; gap: 14px; }
+  .form-grid-2 { grid-template-columns: 1fr 1fr; }
+  .form-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 12px; font-weight: 500; color: var(--muted); }
+  .field input, .field select, .field textarea {
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    font-size: 14px; color: var(--text); background: var(--surface);
+    transition: border-color .15s; }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--accent); }
+  .norm-hint { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 500;
+    padding: 2px 8px; border-radius: 20px; margin-left: 6px; }
+  .badge-ok { background: var(--success-bg); color: var(--success); }
+  .badge-err { background: var(--err-bg); color: var(--err); }
+  .badge-warn { background: var(--warn-bg); color: var(--warn); }
+
+  /* Buttons */
+  .btn-row { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+  .btn { padding: 9px 20px; border-radius: var(--radius-sm); font-size: 14px;
+    font-weight: 500; cursor: pointer; border: 1px solid var(--border);
+    background: transparent; color: var(--text); transition: all .15s; }
+  .btn:hover { background: var(--bg); }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* KPI grid */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px; margin-bottom: 20px; }
+  .kpi-card { background: var(--bg); border-radius: var(--radius-sm); padding: 14px; }
+  .kpi-val { font-size: 24px; font-weight: 600; color: var(--text); }
+  .kpi-label { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .kpi-sub { font-size: 11px; margin-top: 4px; }
+
+  /* Chart */
+  .chart-box { position: relative; width: 100%; }
+
+  /* History table */
+  .hist-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .hist-table th { font-size: 11px; font-weight: 600; color: var(--muted);
+    padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border);
+    text-transform: uppercase; letter-spacing: .04em; }
+  .hist-table td { padding: 9px 10px; border-bottom: 1px solid var(--border); }
+  .hist-table tr:last-child td { border-bottom: none; }
+  .hist-table tr:hover td { background: var(--bg); }
+
+  /* Toast */
+  .toast { position: fixed; bottom: 24px; right: 24px; background: #1e293b;
+    color: #fff; padding: 12px 20px; border-radius: var(--radius); font-size: 13px;
+    transform: translateY(80px); opacity: 0; transition: all .3s; z-index: 999;
+    max-width: 300px; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.error { background: #dc2626; }
+
+  /* Dash sub-tabs */
+  .sub-tabs { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
+  .sub-tab { padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border);
+    font-size: 13px; cursor: pointer; color: var(--muted); background: transparent; }
+  .sub-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .period-btn { padding:5px 12px; border-radius:var(--radius-sm); border:1px solid var(--border);
+    font-size:12px; cursor:pointer; color:var(--muted); background:transparent; transition:all .15s; }
+  .period-btn:hover { background:var(--bg); color:var(--text); }
+  .period-btn.active { background:var(--text); color:#fff; border-color:transparent; }
+
+  /* Loading */
+  .loading { display: flex; align-items: center; gap: 8px; color: var(--muted);
+    font-size: 13px; padding: 20px 0; }
+  .spinner { width: 16px; height: 16px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+
+  .task-item { display:flex; align-items:flex-start; gap:12px; padding:12px 0;
+    border-bottom:1px solid var(--border); }
+  .task-item:last-child { border-bottom:none; }
+  .task-check { width:20px; height:20px; border-radius:4px; border:2px solid var(--border);
+    cursor:pointer; flex-shrink:0; margin-top:2px; display:flex; align-items:center;
+    justify-content:center; transition:all .15s; }
+  .task-check.done { background:var(--success); border-color:var(--success); color:#fff; }
+  .task-body { flex:1; }
+  .task-title { font-size:14px; color:var(--text); line-height:1.4; }
+  .task-title.done { text-decoration:line-through; color:var(--muted); }
+  .task-meta { display:flex; gap:10px; margin-top:4px; flex-wrap:wrap; }
+  .task-meta span { font-size:11px; color:var(--muted); }
+  .task-delete { font-size:16px; cursor:pointer; color:var(--muted); padding:2px 6px;
+    border-radius:4px; transition:all .15s; flex-shrink:0; }
+  .task-delete:hover { background:var(--err-bg); color:var(--err); }
+  .priority-high { color:#dc2626; }
+  .priority-mid { color:#d97706; }
+  .priority-low { color:#16a34a; }
+  .conclusion-box { margin-top:10px; }
+  .conclusion-box textarea { width:100%; padding:8px 10px; border:1px solid var(--border);
+    border-radius:var(--radius-sm); font-size:13px; resize:vertical; min-height:70px;
+    color:var(--text); background:var(--surface); font-family:inherit; }
+
+  @media (max-width: 640px) {
+    .app { flex-direction: column; }
+    .sidebar { width: 100%; }
+    .form-grid-2, .form-grid-3 { grid-template-columns: 1fr; }
+    .page { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <h1>Трекер метрик</h1>
+      <p>Еженедельное заполнение</p>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-item active" onclick="showPage('obr',this)">
+        <span class="nav-icon">💬</span> Обработка запросов
+      </div>
+      <div class="nav-item" onclick="showPage('okk',this)">
+        <span class="nav-icon">✅</span> ОКК
+      </div>
+      <div class="nav-item" onclick="showPage('sklad',this)">
+        <span class="nav-icon">📦</span> Склад Брак
+      </div>
+      <div class="nav-item" onclick="showPage('or',this)">
+        <span class="nav-icon">📣</span> ОР
+      </div>
+      <div class="nav-item" onclick="showPage('dash',this)">
+        <span class="nav-icon">📊</span> Дашборд
+      </div>
+      <div class="nav-item" onclick="openDik(this)">
+        <span class="nav-icon">🔒</span> Метрики директора
+      </div>
+      <div class="nav-item" onclick="showPage('plan',this)">
+        <span class="nav-icon">📅</span> Планирование
+      </div>
+    </nav>
+    <div class="sidebar-week">
+      <label>Неделя</label>
+      <input type="week" id="global-week">
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- Обработка запросов -->
+    <div id="page-obr" class="page active">
+      <div class="page-title">💬 Обработка запросов</div>
+      <div class="page-sub" id="obr-week-label">Заполните метрики за текущую неделю</div>
+      <div class="card">
+        <div class="card-title">Качество и объём</div>
+        <div class="form-grid form-grid-3">
+          <div class="field">
+            <label>Оценка клиентов <span class="badge badge-ok">норма ≥ 4.8</span></label>
+            <input type="number" id="obr-score" step="0.1" min="1" max="5" placeholder="4.9">
+            <span class="norm-hint" id="obr-score-hint"></span>
+          </div>
+          <div class="field">
+            <label>Кол-во запросов</label>
+            <input type="number" id="obr-total" min="0" placeholder="0">
+          </div>
+          <div class="field">
+            <label>Просроченных запросов <span class="badge badge-warn">норма ≤ 1%</span></label>
+            <input type="number" id="obr-expired" min="0" placeholder="0">
+            <span class="norm-hint" id="obr-pct-hint"></span>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn" onclick="loadForm('obr')">Загрузить сохранённое</button>
+          <button class="btn btn-primary" id="obr-save-btn" onclick="saveForm('obr')">Сохранить</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">История (последние 8 недель)</div>
+        <div id="obr-history"><div class="loading"><div class="spinner"></div>Загрузка...</div></div>
+      </div>
+    </div>
+
+    <!-- ОКК -->
+    <div id="page-okk" class="page">
+      <div class="page-title">✅ ОКК — Контроль качества</div>
+      <div class="page-sub" id="okk-week-label">Заполните метрики за текущую неделю</div>
+      <div class="card">
+        <div class="card-title">Брак и восстановление</div>
+        <div class="form-grid form-grid-3">
+          <div class="field"><label>Забраковано (всего, шт.)</label><input type="number" id="okk-rejected" min="0" placeholder="0"></div>
+          <div class="field"><label>С решением по восстановлению</label><input type="number" id="okk-restored" min="0" placeholder="0"></div>
+          <div class="field"><label>Без решения по восстановлению</label><input type="number" id="okk-no-solution" min="0" placeholder="0"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Сортировка</div>
+        <div class="form-grid form-grid-2">
+          <div class="field"><label>Кол-во сортировки (шт.)</label><input type="number" id="okk-sort-count" min="0" placeholder="0"></div>
+          <div class="field"><label>Сумма сортировки (руб.)</label><input type="number" id="okk-sort-sum" min="0" placeholder="0"></div>
+          <div class="field"><label>Выведено в ОПТ (шт.)</label><input type="number" id="okk-opt-count" min="0" placeholder="0"></div>
+          <div class="field"><label>Выведено в ОПТ (руб.)</label><input type="number" id="okk-opt-sum" min="0" placeholder="0"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Рекламации поставщикам</div>
+        <div class="form-grid form-grid-3">
+          <div class="field"><label>Сформировано рекламаций за неделю</label><input type="number" id="okk-rec-new" min="0" placeholder="0"></div>
+          <div class="field"><label>Задач в работе по претензиям</label><input type="number" id="okk-rec-work" min="0" placeholder="0"></div>
+          <div class="field"><label>Завершённых задач по претензиям</label><input type="number" id="okk-rec-done" min="0" placeholder="0"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Обучение, инспекции и обратная связь</div>
+        <div class="form-grid form-grid-2">
+          <div class="field"><label>Кол-во обучений</label><input type="number" id="okk-training" min="0" placeholder="0"></div>
+          <div class="field"><label>Кол-во инспекций</label><input type="number" id="okk-inspections" min="0" placeholder="0"></div>
+          <div class="field"><label>Обратная связь — всего</label><input type="number" id="okk-fb-total" min="0" placeholder="0"></div>
+          <div class="field"><label>Обратная связь — просроченных</label><input type="number" id="okk-fb-expired" min="0" placeholder="0"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn" onclick="loadForm('okk')">Загрузить сохранённое</button>
+          <button class="btn btn-primary" id="okk-save-btn" onclick="saveForm('okk')">Сохранить</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">История (последние 8 недель)</div>
+        <div id="okk-history"><div class="loading"><div class="spinner"></div>Загрузка...</div></div>
+      </div>
+    </div>
+
+    <!-- Склад Брак -->
+    <div id="page-sklad" class="page">
+      <div class="page-title">📦 Склад Брак</div>
+      <div class="page-sub" id="sklad-week-label">Заполните метрики за текущую неделю</div>
+      <div class="card">
+        <div class="card-title">Остаток «Альт»</div>
+        <div class="form-grid form-grid-2">
+          <div class="field">
+            <label>Сумма остатка «Альт» (руб.) <span class="badge badge-warn">контроль ≥ 500 000</span></label>
+            <input type="number" id="sklad-alt-sum" min="0" placeholder="0">
+            <span class="norm-hint" id="sklad-alt-hint"></span>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Движение товара</div>
+        <div class="form-grid form-grid-2">
+          <div class="field"><label>Отправлено подрядчикам (шт.)</label><input type="number" id="sklad-cont-count" min="0" placeholder="0"></div>
+          <div class="field"><label>Отправлено подрядчикам (руб.)</label><input type="number" id="sklad-cont-sum" min="0" placeholder="0"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Остаток брака и консолидация</div>
+        <div class="form-grid form-grid-2">
+          <div class="field"><label>Остаток брака (шт.)</label><input type="number" id="sklad-brak-count" min="0" placeholder="0"></div>
+          <div class="field"><label>Остаток брака (руб.)</label><input type="number" id="sklad-brak-sum" min="0" placeholder="0"></div>
+          <div class="field">
+            <label>Консолидация «один короб — один артикул» (кол-во)</label>
+            <input type="number" id="sklad-cons-count" min="0" placeholder="0">
+          </div>
+          <div class="field">
+            <label>Консолидация «один короб — один артикул» (руб.)</label>
+            <input type="number" id="sklad-cons-sum" min="0" placeholder="0">
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn" onclick="loadForm('sklad')">Загрузить сохранённое</button>
+          <button class="btn btn-primary" id="sklad-save-btn" onclick="saveForm('sklad')">Сохранить</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">История (последние 8 недель)</div>
+        <div id="sklad-history"><div class="loading"><div class="spinner"></div>Загрузка...</div></div>
+      </div>
+    </div>
+
+    <!-- ОР -->
+    <div id="page-or" class="page">
+      <div class="page-title">📣 Отдел рекламаций (ОР)</div>
+      <div class="page-sub" id="or-week-label">Заполните метрики за текущую неделю</div>
+      <!-- Рекламации -->
+      <div class="card">
+        <div class="card-title">Рекламации</div>
+        <div class="form-grid form-grid-2">
+          <div class="field">
+            <label>Кол-во завершённых задач</label>
+            <input type="number" id="or-closed" min="0" placeholder="0">
+          </div>
+          <div class="field">
+            <label>Ошибок при разборе рекламаций <span class="badge badge-warn">норма ≤ 1%</span></label>
+            <input type="number" id="or-errors" min="0" placeholder="0">
+            <span class="norm-hint" id="or-errors-hint"></span>
+          </div>
+          <div class="field">
+            <label>Обратная связь от смежных подразделений</label>
+            <input type="number" id="or-feedback" min="0" placeholder="0">
+          </div>
+          <div class="field">
+            <label>Основная причина обратной связи</label>
+            <input type="text" id="or-reason" placeholder="Например: некомплект, повреждение упаковки...">
+          </div>
+        </div>
+      </div>
+
+      <!-- Время обработки -->
+      <div class="card">
+        <div class="card-title">Время обработки</div>
+        <div class="form-grid form-grid-2">
+          <div class="field">
+            <label>Среднее время закрытия (сек) <span class="badge badge-warn">норма ≤ 1200 сек (20 мин)</span></label>
+            <input type="number" id="or-avg-time" min="0" step="1" placeholder="0">
+            <span class="norm-hint" id="or-avg-time-hint"></span>
+          </div>
+          <div class="field">
+            <label>Среднее время принятия (сек) <span class="badge badge-warn">норма ≤ 1200 сек (20 мин)</span></label>
+            <input type="number" id="or-accept-time" min="0" step="1" placeholder="0">
+            <span class="norm-hint" id="or-accept-time-hint"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Оценка клиентов -->
+      <div class="card">
+        <div class="card-title">Оценка клиентов</div>
+        <div class="form-grid form-grid-2">
+          <div class="field">
+            <label>Оценка скорости обработки <span class="badge badge-ok">норма ≥ 4.8</span></label>
+            <input type="number" id="or-score-speed" step="0.1" min="1" max="5" placeholder="0.0">
+            <span class="norm-hint" id="or-score-speed-hint"></span>
+          </div>
+          <div class="field">
+            <label>Оценка удобства ЛК <span class="badge badge-ok">норма ≥ 4.8</span></label>
+            <input type="number" id="or-score-lk" step="0.1" min="1" max="5" placeholder="0.0">
+            <span class="norm-hint" id="or-score-lk-hint"></span>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn" onclick="loadForm('or')">Загрузить сохранённое</button>
+          <button class="btn btn-primary" id="or-save-btn" onclick="saveForm('or')">Сохранить</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">История (последние 8 недель)</div>
+        <div id="or-history"><div class="loading"><div class="spinner"></div>Загрузка...</div></div>
+      </div>
+    </div>
+
+    <!-- Дашборд -->
+    <div id="page-dash" class="page">
+      <div class="page-title">📊 Дашборд</div>
+      <div class="page-sub">Динамика метрик по всем отделам</div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+        <span style="font-size:13px;color:var(--muted)">Период:</span>
+        <div style="display:flex;gap:4px">
+          <button class="period-btn active" data-period="week" onclick="setPeriod('week',this)">Неделя</button>
+          <button class="period-btn" data-period="month" onclick="setPeriod('month',this)">Месяц</button>
+          <button class="period-btn" data-period="quarter" onclick="setPeriod('quarter',this)">Квартал</button>
+          <button class="period-btn" data-period="year" onclick="setPeriod('year',this)">Год</button>
+        </div>
+        <span id="dash-period-label" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+      <div class="sub-tabs">
+        <button class="sub-tab active" onclick="switchDash('obr',this)">Обработка запросов</button>
+        <button class="sub-tab" onclick="switchDash('okk',this)">ОКК</button>
+        <button class="sub-tab" onclick="switchDash('sklad',this)">Склад Брак</button>
+        <button class="sub-tab" onclick="switchDash('or',this)">ОР</button>
+      </div>
+
+      <div id="dash-obr">
+        <div class="kpi-grid" id="kpi-obr"></div>
+        <div class="card"><div class="card-title">Оценка клиентов по неделям</div>
+          <div class="chart-box" style="height:200px"><canvas id="ch-obr-score"></canvas></div></div>
+        <div class="card"><div class="card-title">Запросы и просроченные</div>
+          <div class="chart-box" style="height:200px"><canvas id="ch-obr-reqs"></canvas></div></div>
+      </div>
+      <div id="dash-okk" style="display:none">
+        <div class="kpi-grid" id="kpi-okk"></div>
+        <div class="card"><div class="card-title">Брак и восстановление</div>
+          <div class="chart-box" style="height:200px"><canvas id="ch-okk-brak"></canvas></div></div>
+        <div class="card"><div class="card-title">Рекламации поставщикам</div>
+          <div class="chart-box" style="height:200px"><canvas id="ch-okk-rec"></canvas></div></div>
+      </div>
+      <div id="dash-sklad" style="display:none">
+        <div class="kpi-grid" id="kpi-sklad"></div>
+        <div class="card"><div class="card-title">Движение товара (шт.)</div>
+          <div class="chart-box" style="height:200px"><canvas id="ch-sklad"></canvas></div></div>
+      </div>
+      <div id="dash-or" style="display:none">
+        <div class="kpi-grid" id="kpi-or"></div>
+        <div class="card"><div class="card-title">Рекламации и ошибки</div>
+          <div class="chart-box" style="height:200px"><canvas id="ch-or"></canvas></div></div>
+        <div class="card"><div class="card-title">Среднее время закрытия (ч)</div>
+          <div class="chart-box" style="height:200px"><canvas id="ch-or-time"></canvas></div></div>
+      </div>
+    </div>
+
+
+    <!-- Метрики директора -->
+    <div id="page-dik" class="page">
+      <div class="page-title">&#128274; Метрики директора — Качество</div>
+      <div class="page-sub" id="dik-month-label">Заполните метрики за текущий месяц</div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+        <label style="font-size:13px;color:var(--muted)">Месяц:</label>
+        <input type="month" id="dik-month-input" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;color:var(--text);background:var(--surface)">
+      </div>
+      <div class="card">
+        <div class="card-title">Рекламации</div>
+        <div class="form-grid form-grid-3">
+          <div class="field">
+            <label>Доля рекламаций (%)</label>
+            <input type="number" id="dik-rec-pct" step="0.01" min="0" max="100" placeholder="0.00">
+          </div>
+          <div class="field">
+            <label>Доля рекламаций в деньгах (%)</label>
+            <input type="number" id="dik-rec-money-pct" step="0.01" min="0" max="100" placeholder="0.00">
+          </div>
+          <div class="field">
+            <label>Сумма рекламаций (руб.)</label>
+            <input type="number" id="dik-rec-sum" min="0" placeholder="0">
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Инспекции в Китае</div>
+        <div class="form-grid form-grid-2">
+          <div class="field">
+            <label>Кол-во инспекций в Китае</label>
+            <input type="number" id="dik-china-total" min="0" placeholder="0">
+          </div>
+          <div class="field">
+            <label>Без просрочек (шт.)</label>
+            <input type="number" id="dik-china-ok" min="0" placeholder="0">
+            <span class="norm-hint" id="dik-china-hint"></span>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn" onclick="loadForm('dik')">Загрузить сохранённое</button>
+          <button class="btn btn-primary" id="dik-save-btn" onclick="saveForm('dik')">Сохранить</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">История (последние 8 недель)</div>
+        <div id="dik-history"><div class="loading"><div class="spinner"></div>Загрузка...</div></div>
+      </div>
+    </div>
+
+    <!-- Планирование -->
+    <div id="page-plan" class="page">
+      <div class="page-title">📅 Планирование</div>
+      <div class="page-sub">Цели и еженедельные задачи по отделам</div>
+
+      <div class="sub-tabs" id="plan-dept-tabs">
+        <button class="sub-tab active" data-dept="okk" onclick="switchPlanDept('okk',this)">✅ ОКК</button>
+        <button class="sub-tab" data-dept="or" onclick="switchPlanDept('or',this)">📣 ОР</button>
+        <button class="sub-tab" data-dept="sklad" onclick="switchPlanDept('sklad',this)">📦 Склад Брак</button>
+        <button class="sub-tab" data-dept="plan-dash" onclick="switchPlanDept('plan-dash',this)">📊 Дашборд</button>
+      </div>
+
+      <div id="plan-dept-okk"><div id="plan-body-okk"></div></div>
+      <div id="plan-dept-or"    style="display:none"><div id="plan-body-or"></div></div>
+      <div id="plan-dept-sklad" style="display:none"><div id="plan-body-sklad"></div></div>
+
+      <!-- Dashboard -->
+      <div id="plan-dept-plan-dash" style="display:none">
+        <div class="card-grid" id="plan-kpi"></div>
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+            <span style="font-size:13px;color:var(--muted)">Отдел:</span>
+            <div style="display:flex;gap:4px">
+              <button class="period-btn active" onclick="filterPlanDash('all',this)">Все</button>
+              <button class="period-btn" onclick="filterPlanDash('okk',this)">ОКК</button>
+              <button class="period-btn" onclick="filterPlanDash('or',this)">ОР</button>
+              <button class="period-btn" onclick="filterPlanDash('sklad',this)">Склад</button>
+            </div>
+          </div>
+          <div class="card-title">Задачи по неделям (план vs факт)</div>
+          <div class="chart-box" style="height:220px"><canvas id="ch-plan-dynamic"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Выполнение по приоритетам</div>
+          <div class="chart-box" style="height:200px"><canvas id="ch-plan-priority"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Все активные и закрытые цели</div>
+          <div id="plan-all-list"></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<!-- ДИК Password Modal -->
+<div id="dik-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border-radius:var(--radius);padding:28px 32px;width:320px;border:1px solid var(--border);">
+    <div style="font-size:32px;text-align:center;margin-bottom:12px">&#128274;</div>
+    <div style="font-size:16px;font-weight:600;text-align:center;margin-bottom:6px">Раздел защищён</div>
+    <div style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:20px">Введите пароль для доступа к метрикам директора</div>
+    <div class="field" style="margin-bottom:16px">
+      <input type="password" id="dik-password-input" placeholder="Пароль" style="text-align:center;font-size:15px;letter-spacing:.05em" onkeydown="if(event.key==='Enter')checkDikPassword()">
+    </div>
+    <div id="dik-pw-error" style="color:#dc2626;font-size:12px;text-align:center;margin-bottom:12px;display:none">Неверный пароль</div>
+    <div style="display:flex;gap:10px">
+      <button class="btn" style="flex:1" onclick="closeDikModal()">Отмена</button>
+      <button class="btn btn-primary" style="flex:1" onclick="checkDikPassword()">Войти</button>
+    </div>
+  </div>
+</div>
+
+
+<script>
+const SUPABASE_URL = 'https://mhberhlcyhzmfhemepjy.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_4vfWyH8aMDG11XIZby-Xhg_PKWnXEs4';
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const charts = {};
+
+function getWeek() {
+  const w = document.getElementById('global-week').value;
+  if (!w) return null;
+  const [yr, wk] = w.split('-W');
+  return { week_number: parseInt(wk), year: parseInt(yr), label: `Нед ${wk}/${yr}` };
+}
+
+function setDefaultWeek() {
+  const now = new Date();
+  const yr = now.getFullYear();
+  const start = new Date(yr, 0, 1);
+  const wn = Math.ceil(((now - start) / 86400000 + start.getDay() + 1) / 7);
+  document.getElementById('global-week').value = `${yr}-W${String(wn).padStart(2, '0')}`;
+}
+
+function showToast(msg, isError = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isError ? ' error' : '');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+function showPage(id, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  el.classList.add('active');
+  updateWeekLabels();
+  if (id === 'dash') loadDash('obr');
+  else loadHistory(id);
+}
+
+function updateWeekLabels() {
+  const w = getWeek();
+  if (!w) return;
+  ['obr', 'okk', 'sklad', 'or', 'dik'].forEach(d => {
+    const el = document.getElementById(d + '-week-label');
+    if (el) el.textContent = `Неделя ${w.week_number}, ${w.year} г.`;
+  });
+}
+
+document.getElementById('global-week').addEventListener('change', () => {
+  updateWeekLabels();
+  const active = document.querySelector('.page.active');
+  if (active) {
+    const id = active.id.replace('page-', '');
+    if (id === 'dash') loadDash(document.querySelector('.sub-tab.active')?.dataset?.id || 'obr');
+    else loadHistory(id);
+  }
+});
+
+// ── SAVE ──────────────────────────────────────────────────────────────────
+async function saveForm(dep) {
+  const w = getWeek();
+  if (!w) { showToast('Выберите неделю', true); return; }
+  const btn = document.getElementById(dep + '-save-btn');
+  btn.disabled = true; btn.textContent = 'Сохранение...';
+
+  let payload = { week_number: w.week_number, year: w.year };
+  if (dep === 'obr') {
+    payload.score = parseFloat(document.getElementById('obr-score').value) || null;
+    payload.total_requests = parseInt(document.getElementById('obr-total').value) || null;
+    payload.expired_requests = parseInt(document.getElementById('obr-expired').value) || null;
+  } else if (dep === 'okk') {
+    payload.rejected = parseInt(document.getElementById('okk-rejected').value) || null;
+    payload.sort_count = parseInt(document.getElementById('okk-sort-count').value) || null;
+    payload.sort_sum = parseFloat(document.getElementById('okk-sort-sum').value) || null;
+    payload.opt_count = parseInt(document.getElementById('okk-opt-count').value) || null;
+    payload.opt_sum = parseFloat(document.getElementById('okk-opt-sum').value) || null;
+    payload.restored = parseInt(document.getElementById('okk-restored').value) || null;
+    payload.no_solution = parseInt(document.getElementById('okk-no-solution').value) || null;
+    payload.rec_new = parseInt(document.getElementById('okk-rec-new').value) || null;
+    payload.rec_in_work = parseInt(document.getElementById('okk-rec-work').value) || null;
+    payload.rec_done = parseInt(document.getElementById('okk-rec-done').value) || null;
+    payload.trainings = parseInt(document.getElementById('okk-training').value) || null;
+    payload.inspections = parseInt(document.getElementById('okk-inspections').value) || null;
+    payload.feedback_total = parseInt(document.getElementById('okk-fb-total').value) || null;
+    payload.feedback_expired = parseInt(document.getElementById('okk-fb-expired').value) || null;
+  } else if (dep === 'sklad') {
+    payload.alt_sum = parseFloat(document.getElementById('sklad-alt-sum').value) || null;
+    payload.contractor_count = parseInt(document.getElementById('sklad-cont-count').value) || null;
+    payload.contractor_sum = parseFloat(document.getElementById('sklad-cont-sum').value) || null;
+    payload.brak_count = parseInt(document.getElementById('sklad-brak-count').value) || null;
+    payload.brak_sum = parseFloat(document.getElementById('sklad-brak-sum').value) || null;
+    payload.cons_count = parseInt(document.getElementById('sklad-cons-count').value) || null;
+    payload.cons_sum = parseFloat(document.getElementById('sklad-cons-sum').value) || null;
+  } else if (dep === 'or') {
+    payload.closed_recs = parseInt(document.getElementById('or-closed').value) || null;
+    payload.errors = parseInt(document.getElementById('or-errors').value) || null;
+    payload.avg_close_hours = parseFloat(document.getElementById('or-avg-time').value) || null;
+    payload.accept_time = parseFloat(document.getElementById('or-accept-time').value) || null;
+    payload.feedback = parseInt(document.getElementById('or-feedback').value) || null;
+    payload.score_speed = parseFloat(document.getElementById('or-score-speed').value) || null;
+    payload.score_lk = parseFloat(document.getElementById('or-score-lk').value) || null;
+    payload.main_reason = document.getElementById('or-reason').value || null;
+  } else if (dep === 'dik') {
+    const dm = getDikMonth(); if (!dm) { showToast('Выберите месяц', true); btn.disabled=false; btn.textContent='Сохранить'; return; }
+    payload = { month_number: dm.month, year: dm.year };
+    payload.rec_pct = parseFloat(document.getElementById('dik-rec-pct').value) || null;
+    payload.rec_money_pct = parseFloat(document.getElementById('dik-rec-money-pct').value) || null;
+    payload.rec_sum = parseFloat(document.getElementById('dik-rec-sum').value) || null;
+    payload.china_total = parseInt(document.getElementById('dik-china-total').value) || null;
+    payload.china_ok = parseInt(document.getElementById('dik-china-ok').value) || null;
+  }
+
+  const table = tableFor(dep);
+  const { error } = await db.from(table).upsert(payload, { onConflict: 'week_number,year' });
+  btn.disabled = false; btn.textContent = 'Сохранить';
+  if (error) { showToast('Ошибка: ' + error.message, true); return; }
+  showToast('✓ Данные сохранены');
+  loadHistory(dep);
+}
+
+function tableFor(dep) {
+  return { obr: 'metrics_obr', okk: 'metrics_okk', sklad: 'metrics_sklad', or: 'metrics_or' }[dep];
+}
+
+// ── LOAD FORM ─────────────────────────────────────────────────────────────
+async function loadForm(dep) {
+  let qb;
+  if (dep === 'dik') {
+    const dm = getDikMonth();
+    if (!dm) { showToast('Выберите месяц', true); return; }
+    qb = db.from(tableFor(dep)).select('*').eq('month_number', dm.month).eq('year', dm.year).single();
+  } else {
+    const w = getWeek();
+    if (!w) { showToast('Выберите неделю', true); return; }
+    qb = db.from(tableFor(dep)).select('*').eq('week_number', w.week_number).eq('year', w.year).single();
+  }
+  const { data, error } = await qb;
+  if (error || !data) { showToast('Данных за эту неделю нет', true); return; }
+  if (dep === 'obr') {
+    setv('obr-score', data.score); setv('obr-total', data.total_requests);
+    setv('obr-expired', data.expired_requests);
+  } else if (dep === 'okk') {
+    setv('okk-rejected', data.rejected); setv('okk-sort-count', data.sort_count);
+    setv('okk-sort-sum', data.sort_sum); setv('okk-restored', data.restored);
+    setv('okk-no-solution', data.no_solution); setv('okk-rec-new', data.rec_new);
+    setv('okk-rec-work', data.rec_in_work); setv('okk-rec-done', data.rec_done);
+    setv('okk-training', data.trainings); setv('okk-inspections', data.inspections);
+    setv('okk-fb-total', data.feedback_total); setv('okk-fb-expired', data.feedback_expired);
+  } else if (dep === 'sklad') {
+    setv('sklad-alt-sum', data.alt_sum); setv('sklad-cont-count', data.contractor_count);
+    setv('sklad-cont-sum', data.contractor_sum); setv('sklad-brak-count', data.brak_count);
+    setv('sklad-brak-sum', data.brak_sum); setv('sklad-cons-count', data.cons_count);
+    setv('sklad-cons-sum', data.cons_sum);
+  } else if (dep === 'or') {
+    setv('or-closed', data.closed_recs); setv('or-errors', data.errors);
+    setv('or-avg-time', data.avg_close_hours); setv('or-accept-time', data.accept_time);
+    setv('or-feedback', data.feedback);
+    setv('or-score-speed', data.score_speed); setv('or-score-lk', data.score_lk);
+    setv('or-reason', data.main_reason);
+  } else if (dep === 'dik') {
+    setv('dik-rec-pct', data.rec_pct); setv('dik-rec-money-pct', data.rec_money_pct);
+    setv('dik-rec-sum', data.rec_sum); setv('dik-china-total', data.china_total);
+    setv('dik-china-ok', data.china_ok);
+  }
+  showToast('Данные загружены');
+}
+
+function setv(id, v) {
+  const el = document.getElementById(id);
+  if (el && v !== null && v !== undefined) el.value = v;
+}
+
+// ── HISTORY ───────────────────────────────────────────────────────────────
+async function loadHistory(dep) {
+  const container = document.getElementById(dep + '-history');
+  if (!container) return;
+  const { data } = await db.from(tableFor(dep)).select('*')
+    .order('year', { ascending: false }).order('week_number', { ascending: false }).limit(8);
+  if (!data || !data.length) { container.innerHTML = '<p style="color:var(--muted);font-size:13px">Данных пока нет</p>'; return; }
+
+  let cols, headers;
+  if (dep === 'obr') {
+    cols = [r => `Нед ${r.week_number}/${r.year}`, r => r.score?.toFixed(2) ?? '—',
+      r => (r.total_requests ?? '—'), r => (r.expired_requests ?? '—'),
+      r => r.total_requests ? ((r.expired_requests / r.total_requests * 100).toFixed(1) + '%') : '—'];
+    headers = ['Неделя', 'Оценка', 'Запросов', 'Просроченных', '% просрочки'];
+  } else if (dep === 'okk') {
+    cols = [r => `Нед ${r.week_number}/${r.year}`, r => r.rejected ?? '—',
+      r => r.restored ?? '—', r => r.rec_new ?? '—', r => r.trainings ?? '—', r => r.inspections ?? '—'];
+    headers = ['Неделя', 'Брак', 'Восстановлено', 'Рекл.новых', 'Обучений', 'Инспекций'];
+  } else if (dep === 'sklad') {
+    cols = [r => `Нед ${r.week_number}/${r.year}`,
+      r => r.alt_sum ? r.alt_sum.toLocaleString('ru') + ' ₽' : '—',
+      r => r.contractor_count ?? '—', r => r.brak_count ?? '—',
+      r => r.cons_count ?? '—', r => r.cons_sum != null ? r.cons_sum.toLocaleString('ru') + ' ₽' : '—'];
+    headers = ['Неделя', 'Сумма Альт', 'Подрядчики', 'Остаток', 'Консол. кол.', 'Консол. руб.'];
+  } else if (dep === 'or') {
+    cols = [r => `Нед ${r.week_number}/${r.year}`, r => r.closed_recs ?? '—',
+      r => r.errors ?? '—', r => r.avg_close_hours ?? '—', r => r.feedback ?? '—'];
+    headers = ['Неделя', 'Закрыто', 'Ошибки', 'Ср.время, ч', 'Обр.связь'];
+  } else if (dep === 'dik') {
+    cols = [r => `${r.month_number}/${r.year}`,
+      r => r.rec_pct != null ? r.rec_pct.toFixed(2) + '%' : '—',
+      r => r.rec_money_pct != null ? r.rec_money_pct.toFixed(2) + '%' : '—',
+      r => r.rec_sum != null ? r.rec_sum.toLocaleString('ru') + ' ₽' : '—',
+      r => r.china_total ?? '—',
+      r => r.china_ok ?? '—'];
+    headers = ['Неделя', 'Доля рекл.', 'Доля в деньгах', 'Сумма рекл.', 'Инспекций', 'Без просрочек'];
+  }
+  let html = '<div style="overflow-x:auto"><table class="hist-table"><thead><tr>';
+  headers.forEach(h => html += `<th>${h}</th>`);
+  html += '</tr></thead><tbody>';
+  data.forEach(r => {
+    html += '<tr>';
+    cols.forEach(fn => html += `<td>${fn(r)}</td>`);
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────────────────
+function switchDash(id, el) {
+  document.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+  ['obr','okk','sklad','or'].forEach(d => {
+    const el2 = document.getElementById('dash-' + d);
+    if (el2) el2.style.display = d === id ? 'block' : 'none';
+  });
+  el.classList.add('active');
+  el.dataset.id = id;
+  loadDash(id);
+}
+
+function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+
+function mkChart(id, cfg) {
+  destroyChart(id);
+  const el = document.getElementById(id);
+  if (!el) return;
+  charts[id] = new Chart(el, { ...cfg, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, ...cfg.options } });
+}
+
+function kpiCard(label, val, sub, status) {
+  const colors = { ok: '#16a34a', warn: '#d97706', err: '#dc2626', '': 'var(--muted)' };
+  return `<div class="kpi-card"><div class="kpi-val">${val}</div><div class="kpi-label">${label}</div>${sub ? `<div class="kpi-sub" style="color:${colors[status||'']};">${sub}</div>` : ''}</div>`;
+}
+
+
+// ── Period filter ─────────────────────────────────────────────────────────
+let currentPeriod = 'week';
+
+function setPeriod(period, el) {
+  currentPeriod = period;
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  const labels = { week:'по неделям', month:'по месяцам', quarter:'по кварталам', year:'по годам' };
+  document.getElementById('dash-period-label').textContent = '— ' + labels[period];
+  const activeSubTab = document.querySelector('.sub-tab.active');
+  const dep = activeSubTab?.dataset?.id || 'obr';
+  loadDash(dep);
+}
+
+async function fetchAggregated(dep) {
+  const { data } = await db.from(tableFor(dep)).select('*')
+    .order('year', { ascending: true })
+    .order('week_number', { ascending: true })
+    .limit(104); // up to 2 years of weeks
+  if (!data || !data.length) return { labels: [], rows: [] };
+
+  if (currentPeriod === 'week') {
+    const slice = data.slice(-12);
+    return {
+      labels: slice.map(r => `Нед ${r.week_number}/${String(r.year).slice(2)}`),
+      rows: slice
+    };
+  }
+
+  if (currentPeriod === 'month') {
+    const map = {};
+    data.forEach(r => {
+      const d = weekToDate(r.week_number, r.year);
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      if (!map[key]) map[key] = [];
+      map[key].push(r);
+    });
+    const keys = Object.keys(map).sort().slice(-12);
+    return {
+      labels: keys.map(k => { const [y,m]=k.split('-'); return new Date(y,m-1).toLocaleString('ru',{month:'short',year:'2-digit'}); }),
+      rows: keys.map(k => aggregateRows(map[k]))
+    };
+  }
+
+  if (currentPeriod === 'quarter') {
+    const map = {};
+    data.forEach(r => {
+      const d = weekToDate(r.week_number, r.year);
+      const q = Math.ceil((d.getMonth()+1)/3);
+      const key = `${d.getFullYear()}-Q${q}`;
+      if (!map[key]) map[key] = [];
+      map[key].push(r);
+    });
+    const keys = Object.keys(map).sort().slice(-8);
+    return { labels: keys.map(k => k.replace('-', ' ')), rows: keys.map(k => aggregateRows(map[k])) };
+  }
+
+  if (currentPeriod === 'year') {
+    const map = {};
+    data.forEach(r => {
+      const key = String(r.year);
+      if (!map[key]) map[key] = [];
+      map[key].push(r);
+    });
+    const keys = Object.keys(map).sort();
+    return { labels: keys, rows: keys.map(k => aggregateRows(map[k])) };
+  }
+
+  return { labels: [], rows: [] };
+}
+
+function weekToDate(week, year) {
+  const jan1 = new Date(year, 0, 1);
+  return new Date(jan1.getTime() + (week - 1) * 7 * 86400000);
+}
+
+function aggregateRows(rows) {
+  if (!rows.length) return {};
+  const numericKeys = Object.keys(rows[0]).filter(k =>
+    !['id','created_at','week_number','year'].includes(k) && typeof rows[0][k] === 'number'
+  );
+  const result = { week_number: rows[0].week_number, year: rows[0].year };
+  numericKeys.forEach(k => {
+    const vals = rows.map(r => r[k]).filter(v => v !== null && v !== undefined);
+    if (!vals.length) { result[k] = null; return; }
+    // averages for rates/scores, sums for counts/amounts
+    const isAvg = ['score','pct','avg','hours'].some(s => k.includes(s));
+    result[k] = isAvg
+      ? vals.reduce((a,b)=>a+b,0) / vals.length
+      : vals.reduce((a,b)=>a+b,0);
+  });
+  return result;
+}
+
+async function loadDash(dep) {
+  const { labels, rows: data } = await fetchAggregated(dep);
+  if (!data || !data.length) return;
+  const last = data[data.length - 1] || {};
+
+  if (dep === 'obr') {
+    const score = last.score?.toFixed(2) ?? '—';
+    const pct = last.total_requests ? (last.expired_requests / last.total_requests * 100).toFixed(1) + '%' : '—';
+    document.getElementById('kpi-obr').innerHTML =
+      kpiCard('Оценка клиентов', score, last.score ? (last.score >= 4.8 ? '✓ норма' : '✗ ниже нормы') : '', last.score ? (last.score >= 4.8 ? 'ok' : 'err') : '') +
+      kpiCard('Запросов за неделю', (last.total_requests ?? '—').toLocaleString()) +
+      kpiCard('Просроченных', last.expired_requests ?? '—', '% от общего: ' + pct, last.total_requests && (last.expired_requests / last.total_requests) > 0.01 ? 'err' : 'ok');
+
+    mkChart('ch-obr-score', { type: 'line', data: { labels, datasets: [
+      { label: 'Оценка', data: data.map(r => r.score), borderColor: '#2563eb', tension: .3, fill: false, pointRadius: 4 },
+      { label: 'Норма', data: labels.map(() => 4.8), borderColor: '#dc2626', borderDash: [6, 3], pointRadius: 0 }
+    ]}});
+    mkChart('ch-obr-reqs', { type: 'bar', data: { labels, datasets: [
+      { label: 'Всего', data: data.map(r => r.total_requests), backgroundColor: '#93c5fd' },
+      { label: 'Просроченных', data: data.map(r => r.expired_requests), backgroundColor: '#fca5a5' }
+    ]}});
+  } else if (dep === 'okk') {
+    document.getElementById('kpi-okk').innerHTML =
+      kpiCard('Брак (шт.)', last.rejected ?? '—') +
+      kpiCard('Восстановлено', last.restored ?? '—') +
+      kpiCard('Рекламаций новых', last.rec_new ?? '—') +
+      kpiCard('Обучений', last.trainings ?? '—');
+
+    mkChart('ch-okk-brak', { type: 'bar', data: { labels, datasets: [
+      { label: 'Брак', data: data.map(r => r.rejected), backgroundColor: '#fca5a5' },
+      { label: 'Восстановлено', data: data.map(r => r.restored), backgroundColor: '#86efac' },
+      { label: 'Без решения', data: data.map(r => r.no_solution), backgroundColor: '#fcd34d' }
+    ]}});
+    mkChart('ch-okk-rec', { type: 'line', data: { labels, datasets: [
+      { label: 'Новых', data: data.map(r => r.rec_new), borderColor: '#dc2626', tension: .3, pointRadius: 4 },
+      { label: 'Завершённых', data: data.map(r => r.rec_done), borderColor: '#16a34a', tension: .3, pointRadius: 4 }
+    ]}});
+  } else if (dep === 'sklad') {
+    const altWarn = last.alt_sum >= 500000;
+    document.getElementById('kpi-sklad').innerHTML =
+      kpiCard('Остаток «Альт»', last.alt_sum ? last.alt_sum.toLocaleString('ru') + ' ₽' : '—', altWarn ? '⚠ требует контроля' : '', altWarn ? 'warn' : '') +
+      kpiCard('Подрядчики (шт.)', last.contractor_count ?? '—') +
+      kpiCard('Остаток брака', last.brak_count ?? '—') +
+      kpiCard('Консолидация (шт.)', last.cons_count ?? '—');
+
+    mkChart('ch-sklad', { type: 'bar', data: { labels, datasets: [
+      { label: 'Подрядчики', data: data.map(r => r.contractor_count), backgroundColor: '#a5b4fc' },
+      { label: 'Консолидация', data: data.map(r => r.cons_count), backgroundColor: '#6ee7b7' },
+      { label: 'Остаток', data: data.map(r => r.brak_count), backgroundColor: '#fca5a5' }
+    ]}});
+  } else if (dep === 'or') {
+    document.getElementById('kpi-or').innerHTML =
+      kpiCard('Закрыто рекламаций', last.closed_recs ?? '—') +
+      kpiCard('Ошибок', last.errors ?? '—', last.errors > 0 ? 'есть ошибки' : '', last.errors > 0 ? 'warn' : 'ok') +
+      kpiCard('Ср. время, ч', last.avg_close_hours ?? '—') +
+      kpiCard('Обратная связь', last.feedback ?? '—');
+
+    mkChart('ch-or', { type: 'bar', data: { labels, datasets: [
+      { label: 'Закрыто', data: data.map(r => r.closed_recs), backgroundColor: '#93c5fd' },
+      { label: 'Ошибки', data: data.map(r => r.errors), backgroundColor: '#fca5a5' }
+    ]}});
+    mkChart('ch-or-time', { type: 'line', data: { labels, datasets: [
+      { label: 'Ср. время', data: data.map(r => r.avg_close_hours), borderColor: '#f59e0b', tension: .3, fill: false, pointRadius: 4 }
+    ]}});
+  }
+}
+
+// ── Live hints ────────────────────────────────────────────────────────────
+document.getElementById('obr-score').addEventListener('input', function() {
+  const h = document.getElementById('obr-score-hint');
+  const v = parseFloat(this.value);
+  if (!this.value) { h.innerHTML = ''; return; }
+  h.innerHTML = v >= 4.8 ? '<span class="badge badge-ok">✓ Норма соблюдена</span>' : '<span class="badge badge-err">✗ Ниже нормы 4.8</span>';
+});
+
+function updatePctHint() {
+  const total = parseInt(document.getElementById('obr-total').value) || 0;
+  const exp = parseInt(document.getElementById('obr-expired').value) || 0;
+  const h = document.getElementById('obr-pct-hint');
+  if (!total) { h.innerHTML = ''; return; }
+  const pct = (exp / total * 100).toFixed(1);
+  h.innerHTML = exp / total <= 0.01 ? `<span class="badge badge-ok">✓ ${pct}% — норма</span>` : `<span class="badge badge-err">✗ ${pct}% — превышение нормы</span>`;
+}
+document.getElementById('obr-total').addEventListener('input', updatePctHint);
+document.getElementById('obr-expired').addEventListener('input', updatePctHint);
+
+document.getElementById('sklad-alt-sum').addEventListener('input', function() {
+  const h = document.getElementById('sklad-alt-hint');
+  const v = parseFloat(this.value) || 0;
+  h.innerHTML = v >= 500000 ? '<span class="badge badge-warn">⚠ Превышает 500 000 ₽ — требует контроля</span>' : '';
+});
+
+setDefaultWeek();
+setDefaultDikMonth();
+updateWeekLabels();
+loadHistory('obr');
+
+function getDikMonth() {
+  const v = document.getElementById('dik-month-input').value;
+  if (!v) return null;
+  const [yr, mo] = v.split('-');
+  return { month: parseInt(mo), year: parseInt(yr), label: new Date(yr, mo-1).toLocaleString('ru', {month:'long', year:'numeric'}) };
+}
+
+function setDefaultDikMonth() {
+  const now = new Date();
+  document.getElementById('dik-month-input').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+}
+
+
+// ── ДИК password ─────────────────────────────────────────────────────────
+let dikUnlocked = false;
+let dikNavEl = null;
+
+function openDik(el) {
+  if (dikUnlocked) { showPage('dik', el); return; }
+  dikNavEl = el;
+  const modal = document.getElementById('dik-modal');
+  modal.style.display = 'flex';
+  document.getElementById('dik-password-input').value = '';
+  document.getElementById('dik-pw-error').style.display = 'none';
+  setTimeout(() => document.getElementById('dik-password-input').focus(), 50);
+}
+
+function closeDikModal() {
+  document.getElementById('dik-modal').style.display = 'none';
+}
+
+function checkDikPassword() {
+  const val = document.getElementById('dik-password-input').value;
+  if (val === 'Bugrim-VAS123456') {
+    dikUnlocked = true;
+    closeDikModal();
+    showPage('dik', dikNavEl);
+    loadHistory('dik');
+  } else {
+    document.getElementById('dik-pw-error').style.display = 'block';
+    document.getElementById('dik-password-input').value = '';
+    document.getElementById('dik-password-input').focus();
+  }
+}
+
+// ДИК save/load/history support
+const _origTableFor = tableFor;
+window.tableFor = function(dep) {
+  if (dep === 'dik') return 'metrics_dik';
+  return _origTableFor(dep);
+};
+
+// China hint
+document.getElementById('dik-china-ok').addEventListener('input', function() {
+  const total = parseInt(document.getElementById('dik-china-total').value) || 0;
+  const ok = parseInt(this.value) || 0;
+  const h = document.getElementById('dik-china-hint');
+  if (!total) { h.innerHTML = ''; return; }
+  const pct = (ok / total * 100).toFixed(0);
+  h.innerHTML = ok === total
+    ? '<span class="badge badge-ok">100% без просрочек</span>'
+    : '<span class="badge badge-warn">' + pct + '% без просрочек</span>';
+});
+
+document.getElementById('dik-month-input').addEventListener('change', function() {
+  const dm = getDikMonth();
+  if (dm) document.getElementById('dik-month-label').textContent = 'Метрики за ' + dm.label;
+});
+
+document.getElementById('dik-china-total').addEventListener('input', function() {
+  document.getElementById('dik-china-ok').dispatchEvent(new Event('input'));
+});
+
+// ── ОР live hints ─────────────────────────────────────────
+document.getElementById('or-errors').addEventListener('input', function() {
+  const closed = parseInt(document.getElementById('or-closed').value) || 0;
+  const errors = parseInt(this.value) || 0;
+  const h = document.getElementById('or-errors-hint');
+  if (!closed) { h.innerHTML = ''; return; }
+  const pct = (errors / closed * 100).toFixed(1);
+  h.innerHTML = errors / closed <= 0.01
+    ? '<span class="badge badge-ok">✓ ' + pct + '% — норма</span>'
+    : '<span class="badge badge-err">✗ ' + pct + '% — превышение нормы</span>';
+});
+document.getElementById('or-closed').addEventListener('input', function() {
+  document.getElementById('or-errors').dispatchEvent(new Event('input'));
+});
+
+function checkTimeSec(inputId, hintId) {
+  const v = parseFloat(document.getElementById(inputId).value) || 0;
+  const h = document.getElementById(hintId);
+  if (!v) { h.innerHTML = ''; return; }
+  const mins = (v / 60).toFixed(1);
+  h.innerHTML = v <= 1200
+    ? '<span class="badge badge-ok">✓ ' + mins + ' мин — норма</span>'
+    : '<span class="badge badge-err">✗ ' + mins + ' мин — превышение нормы (20 мин)</span>';
+}
+document.getElementById('or-avg-time').addEventListener('input', function() {
+  checkTimeSec('or-avg-time', 'or-avg-time-hint');
+});
+document.getElementById('or-accept-time').addEventListener('input', function() {
+  checkTimeSec('or-accept-time', 'or-accept-time-hint');
+});
+
+function checkScore48(inputId, hintId) {
+  const v = parseFloat(document.getElementById(inputId).value);
+  const h = document.getElementById(hintId);
+  if (!v) { h.innerHTML = ''; return; }
+  h.innerHTML = v >= 4.8
+    ? '<span class="badge badge-ok">✓ Норма соблюдена</span>'
+    : '<span class="badge badge-err">✗ Ниже нормы 4.8</span>';
+}
+document.getElementById('or-score-speed').addEventListener('input', function() {
+  checkScore48('or-score-speed', 'or-score-speed-hint');
+});
+document.getElementById('or-score-lk').addEventListener('input', function() {
+  checkScore48('or-score-lk', 'or-score-lk-hint');
+});
+
+
+
+// ══════════════════════════════════════════════════════════
+// ПЛАНИРОВАНИЕ — цели без срока + еженедельные задачи
+// ══════════════════════════════════════════════════════════
+
+function switchPlanDept(dept, el) {
+  document.querySelectorAll('#plan-dept-tabs .sub-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['okk','or','sklad','plan-dash'].forEach(d => {
+    const el2 = document.getElementById('plan-dept-' + d);
+    if (el2) el2.style.display = d === dept ? 'block' : 'none';
+  });
+  if (dept === 'plan-dash') loadPlanDash('all');
+  else renderPlanDept(dept);
+}
+
+// ── Render full dept view ─────────────────────────────────
+async function renderPlanDept(dept) {
+  const body = document.getElementById('plan-body-' + dept);
+  if (!body) return;
+  body.innerHTML = '<div class="loading"><div class="spinner"></div>Загрузка...</div>';
+
+  // Load ALL goals for this dept (active + closed)
+  const { data: goals } = await db.from('plan_goals')
+    .select('*')
+    .eq('dept', dept)
+    .order('created_at', { ascending: true });
+
+  const list = goals || [];
+  const activeGoals = list.filter(g => !g.closed);
+  const closedGoals = list.filter(g => g.closed);
+
+  let html = '';
+
+  // ── Active goals ──────────────────────────────────────
+  if (activeGoals.length === 0) {
+    html += '<div class="card" style="text-align:center;color:var(--muted);padding:24px"><div style="font-size:32px;margin-bottom:8px">🎯</div><div>Нет активных целей — добавьте первую</div></div>';
+  }
+
+  for (let idx = 0; idx < activeGoals.length; idx++) {
+    const g = activeGoals[idx];
+    const w = getWeek();
+
+    // Load tasks for this week for this goal
+    let weekTasks = [], allTasks = [];
+    if (w) {
+      const { data: wt } = await db.from('plan_tasks')
+        .select('*').eq('goal_id', g.id)
+        .eq('week_number', w.week_number).eq('year', w.year)
+        .order('created_at');
+      weekTasks = wt || [];
+    }
+    // Load all tasks to show overall progress
+    const { data: at } = await db.from('plan_tasks').select('*').eq('goal_id', g.id);
+    allTasks = at || [];
+
+    const totalAll = allTasks.length;
+    const doneAll = allTasks.filter(t => t.done).length;
+    const pct = totalAll ? Math.round(doneAll / totalAll * 100) : 0;
+
+    html += `<div class="card" style="margin-bottom:16px;border-left:4px solid #2563eb">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+        <div style="flex:1">
+          <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Цель ${idx+1} из ${activeGoals.length}</div>
+          <div style="font-size:17px;font-weight:600;margin-top:3px;color:var(--text)">${g.title}</div>
+          ${g.description ? `<div style="font-size:13px;color:var(--muted);margin-top:3px">${g.description}</div>` : ''}
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">Создана: ${new Date(g.created_at).toLocaleDateString('ru')}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex-shrink:0">
+          <button onclick="closeGoal('${g.id}','${dept}')" class="btn" style="font-size:12px;padding:5px 12px;color:#16a34a;border-color:#16a34a">✓ Закрыть цель</button>
+          <button onclick="deleteGoal('${g.id}','${dept}')" class="btn" style="font-size:12px;padding:5px 12px;color:var(--err);border-color:var(--err)">✕ Удалить</button>
+        </div>
+      </div>`;
+
+    // Overall progress bar
+    if (totalAll > 0) {
+      html += `<div style="display:flex;align-items:center;gap:10px;margin-top:12px;margin-bottom:4px">
+        <span style="font-size:12px;color:var(--muted)">Общий прогресс:</span>
+        <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${pct===100?'#16a34a':pct>=50?'#d97706':'#2563eb'};transition:width .4s"></div>
+        </div>
+        <span style="font-size:12px;font-weight:600;color:${pct===100?'#16a34a':pct>=50?'#d97706':'#2563eb'}">${doneAll}/${totalAll} (${pct}%)</span>
+      </div>`;
+    }
+
+    // ── This week's tasks ──────────────────────────────
+    html += `<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">
+      <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:10px">
+        📋 ЗАДАЧИ НА ТЕКУЩУЮ НЕДЕЛЮ ${w ? '(Нед '+w.week_number+'/'+w.year+')' : ''}
+      </div>`;
+
+    if (weekTasks.length === 0) {
+      html += '<p style="font-size:13px;color:var(--muted);margin-bottom:10px">Задач на эту неделю нет</p>';
+    }
+    weekTasks.forEach(t => {
+      const isCancelled = !!t.cancelled;
+      const prioIcon = t.priority === 'Высокий' ? '<span class="priority-high">🔴 Высокий</span>'
+        : t.priority === 'Средний' ? '<span class="priority-mid">🟡 Средний</span>'
+        : '<span class="priority-low">🟢 Низкий</span>';
+      html += `<div class="task-item" style="${isCancelled ? 'background:#fff5f5;border-radius:8px;padding:8px;border-left:3px solid #dc2626' : ''}">
+        <div class="task-check ${t.done ? 'done' : ''}"
+          onclick="${!isCancelled && !t.done ? `togglePlanTask('${t.id}','${g.id}','${dept}')` : ''}"
+          style="${isCancelled ? 'background:#fecaca;border-color:#fca5a5;cursor:not-allowed' : !t.done ? 'cursor:pointer' : ''}">
+          ${t.done ? '✓' : isCancelled ? '—' : ''}
+        </div>
+        <div class="task-body">
+          <div class="task-title" style="${isCancelled || t.done ? 'text-decoration:line-through;color:var(--muted)' : ''}">${t.title}</div>
+          <div class="task-meta">
+            ${prioIcon}
+            ${t.due_date ? '<span>📅 '+t.due_date+'</span>' : ''}
+            ${t.comment ? '<span>💬 '+t.comment+'</span>' : ''}
+          </div>
+          ${isCancelled ? `
+            <div style="margin-top:7px;padding:6px 10px;background:#fee2e2;border-left:3px solid #dc2626;border-radius:4px;display:flex;align-items:flex-start;gap:6px">
+              <span style="font-size:13px">🚫</span>
+              <div>
+                <div style="font-size:11px;font-weight:600;color:#dc2626;text-transform:uppercase;letter-spacing:.04em">Причина отмены</div>
+                <div style="font-size:13px;color:#991b1b;margin-top:2px">${t.cancel_reason || '—'}</div>
+              </div>
+            </div>` : ''}
+          ${t.done ? `<div class="conclusion-box">
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Вывод по задаче:</label>
+            <textarea id="concl-${t.id}" placeholder="Что сделано, что учесть на следующей неделе...">${t.conclusion||''}</textarea>
+            <div style="text-align:right;margin-top:4px">
+              <button class="btn" style="font-size:12px;padding:4px 10px" onclick="savePlanConclusion('${t.id}','${g.id}','${dept}')">Сохранить</button>
+            </div>
+          </div>` : ''}
+        </div>
+        ${!t.done && !isCancelled ? `<button onclick="cancelPlanTask('${t.id}','${g.id}','${dept}')" class="task-delete" title="Отменить задачу" style="color:var(--warn);font-size:18px">✕</button>` : ''}
+      </div>`;
+    });
+
+    // Add task form
+    html += `<div style="margin-top:10px;padding:12px;background:var(--bg);border-radius:var(--radius-sm)">
+      <div style="font-size:12px;font-weight:500;color:var(--muted);margin-bottom:8px">+ Новая задача на эту неделю</div>
+      <div class="form-grid form-grid-2" style="margin-bottom:8px">
+        <input type="text" id="ti-${g.id}" placeholder="Название задачи" style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;color:var(--text);background:var(--surface)">
+        <input type="date" id="td-${g.id}" style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;color:var(--text);background:var(--surface)">
+        <select id="tp-${g.id}" style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;color:var(--text);background:var(--surface)">
+          <option value="Высокий">🔴 Высокий</option>
+          <option value="Средний" selected>🟡 Средний</option>
+          <option value="Низкий">🟢 Низкий</option>
+        </select>
+        <input type="text" id="tc-${g.id}" placeholder="Комментарий (необязательно)" style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;color:var(--text);background:var(--surface)">
+      </div>
+      <button class="btn btn-primary" style="font-size:13px;padding:7px 16px" onclick="addPlanTask('${g.id}','${dept}')">Добавить задачу</button>
+    </div></div></div>`;
+  }
+
+  // ── Closed goals (collapsed) ──────────────────────────
+  if (closedGoals.length > 0) {
+    html += `<div style="margin-top:20px">
+      <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">
+        ✓ Закрытые цели (${closedGoals.length})
+      </div>`;
+    closedGoals.forEach(g => {
+      html += `<div class="card" style="margin-bottom:8px;border-left:4px solid #16a34a;opacity:.8">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div style="font-size:15px;font-weight:500;text-decoration:line-through;color:var(--muted)">${g.title}</div>
+            ${g.conclusion ? `<div style="font-size:12px;color:var(--muted);margin-top:4px">💡 ${g.conclusion}</div>` : ''}
+            <div style="font-size:11px;color:var(--muted);margin-top:3px">Закрыта: ${g.closed_at ? new Date(g.closed_at).toLocaleDateString('ru') : '—'}</div>
+          </div>
+          <button onclick="reopenGoal('${g.id}','${dept}')" class="btn" style="font-size:12px;padding:4px 10px;flex-shrink:0">↩ Открыть снова</button>
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  // ── Add goal button (max 3 active) ───────────────────
+  if (activeGoals.length < 3) {
+    html += `<div class="card" style="border:2px dashed var(--border);background:var(--bg);margin-top:16px">
+      <div style="font-size:13px;font-weight:500;color:var(--muted);margin-bottom:12px">
+        🎯 Новая цель (активных: ${activeGoals.length}/3)
+      </div>
+      <div class="form-grid form-grid-2">
+        <div class="field">
+          <label>Название цели</label>
+          <input type="text" id="ng-title-${dept}" placeholder="Например: снизить брак на 10%">
+        </div>
+        <div class="field">
+          <label>Описание (необязательно)</label>
+          <input type="text" id="ng-desc-${dept}" placeholder="Детали...">
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="addGoal('${dept}')">+ Добавить цель</button>
+      </div>
+    </div>`;
+  } else {
+    html += `<div style="font-size:13px;color:var(--muted);padding:12px;text-align:center;margin-top:12px">
+      Достигнут максимум — 3 активные цели. Закройте одну чтобы добавить новую.
+    </div>`;
+  }
+
+  body.innerHTML = html;
+}
+
+// ── Goal CRUD ─────────────────────────────────────────────
+async function addGoal(dept) {
+  const title = document.getElementById('ng-title-'+dept)?.value.trim();
+  if (!title) { showToast('Введите название цели', true); return; }
+  const { error } = await db.from('plan_goals').insert({
+    dept, title,
+    description: document.getElementById('ng-desc-'+dept)?.value.trim() || null,
+    closed: false
+  });
+  if (error) { showToast('Ошибка: '+error.message, true); return; }
+  showToast('✓ Цель добавлена');
+  renderPlanDept(dept);
+}
+
+async function closeGoal(goalId, dept) {
+  const conclusion = prompt('Напишите вывод по достигнутой цели (необязательно):');
+  await db.from('plan_goals').update({ closed: true, closed_at: new Date().toISOString(), conclusion: conclusion || null }).eq('id', goalId);
+  showToast('✓ Цель закрыта');
+  renderPlanDept(dept);
+}
+
+async function reopenGoal(goalId, dept) {
+  await db.from('plan_goals').update({ closed: false, closed_at: null }).eq('id', goalId);
+  showToast('Цель снова активна');
+  renderPlanDept(dept);
+}
+
+async function deleteGoal(goalId, dept) {
+  if (!confirm('Удалить цель и все её задачи?')) return;
+  await db.from('plan_tasks').delete().eq('goal_id', goalId);
+  await db.from('plan_goals').delete().eq('id', goalId);
+  showToast('Цель удалена');
+  renderPlanDept(dept);
+}
+
+// ── Task CRUD ─────────────────────────────────────────────
+async function addPlanTask(goalId, dept) {
+  const title = document.getElementById('ti-'+goalId)?.value.trim();
+  if (!title) { showToast('Введите название задачи', true); return; }
+  const w = getWeek();
+  if (!w) { showToast('Выберите неделю', true); return; }
+  const { error } = await db.from('plan_tasks').insert({
+    goal_id: goalId, dept,
+    week_number: w.week_number, year: w.year,
+    title,
+    due_date: document.getElementById('td-'+goalId)?.value || null,
+    priority: document.getElementById('tp-'+goalId)?.value || 'Средний',
+    comment: document.getElementById('tc-'+goalId)?.value.trim() || null,
+    done: false
+  });
+  if (error) { showToast('Ошибка: '+error.message, true); return; }
+  showToast('✓ Задача добавлена');
+  renderPlanDept(dept);
+}
+
+async function togglePlanTask(taskId, goalId, dept) {
+  const { data } = await db.from('plan_tasks').select('done').eq('id', taskId).single();
+  await db.from('plan_tasks').update({ done: !data.done }).eq('id', taskId);
+  renderPlanDept(dept);
+}
+
+async function cancelPlanTask(taskId, goalId, dept) {
+  const reason = prompt('Укажите причину отмены задачи:');
+  if (reason === null) return;
+  if (!reason.trim()) { showToast('Причина обязательна', true); return; }
+  const { error } = await db.from('plan_tasks')
+    .update({ cancelled: true, cancel_reason: reason.trim() })
+    .eq('id', taskId);
+  if (error) { showToast('Ошибка: ' + error.message, true); return; }
+  showToast('Задача отменена');
+  renderPlanDept(dept);
+}
+
+async function savePlanConclusion(taskId, goalId, dept) {
+  const val = document.getElementById('concl-'+taskId)?.value.trim();
+  await db.from('plan_tasks').update({ conclusion: val }).eq('id', taskId);
+  showToast('✓ Вывод сохранён');
+}
+
+// ── Planning Dashboard ────────────────────────────────────
+async function loadPlanDash(deptFilter) {
+  let q = db.from('plan_tasks').select('*, plan_goals(title,closed)').order('year').order('week_number');
+  if (deptFilter !== 'all') q = q.eq('dept', deptFilter);
+  const { data } = await q.limit(500);
+
+  if (!data || !data.length) {
+    document.getElementById('plan-kpi').innerHTML = '<p style="color:var(--muted);font-size:13px;padding:12px 0">Данных пока нет</p>';
+    return;
+  }
+
+  const total = data.filter(t=>!t.cancelled).length, done = data.filter(t=>t.done).length;
+  const withConclusion = data.filter(t=>t.done&&t.conclusion).length;
+  const pct = Math.round(done/total*100);
+  const cancelled = data.filter(t=>t.cancelled).length;
+  const overdue = data.filter(t=>!t.done&&!t.cancelled&&t.due_date&&new Date(t.due_date)<new Date()).length;
+
+  document.getElementById('plan-kpi').innerHTML =
+    kpiCard('Всего задач', total) +
+    kpiCard('Выполнено', done, pct+'%', pct>=80?'ok':pct>=50?'warn':'err') +
+    kpiCard('Просрочено', overdue, overdue>0?'требует внимания':'✓ нет', overdue>0?'err':'ok') +
+    kpiCard('Отменено', cancelled) +
+    kpiCard('Выводов написано', withConclusion, done>0?Math.round(withConclusion/done*100)+'% от выполненных':'');
+
+  const byWeek = {};
+  data.forEach(t => {
+    const key = `Нед ${t.week_number}/${String(t.year).slice(2)}`;
+    if (!byWeek[key]) byWeek[key] = {total:0,done:0};
+    byWeek[key].total++; if(t.done) byWeek[key].done++;
+  });
+  const wLabels = Object.keys(byWeek).slice(-10);
+
+  destroyChart('ch-plan-dynamic');
+  const el1 = document.getElementById('ch-plan-dynamic');
+  if (el1) charts['ch-plan-dynamic'] = new Chart(el1, {
+    type:'bar', data:{labels:wLabels, datasets:[
+      {label:'Всего',data:wLabels.map(k=>byWeek[k].total),backgroundColor:'#bfdbfe'},
+      {label:'Выполнено',data:wLabels.map(k=>byWeek[k].done),backgroundColor:'#6ee7b7'}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}
+  });
+
+  const byPrio = {'Высокий':{total:0,done:0},'Средний':{total:0,done:0},'Низкий':{total:0,done:0}};
+  data.forEach(t=>{ if(byPrio[t.priority]){byPrio[t.priority].total++;if(t.done)byPrio[t.priority].done++;}});
+  destroyChart('ch-plan-priority');
+  const el2 = document.getElementById('ch-plan-priority');
+  if (el2) charts['ch-plan-priority'] = new Chart(el2, {
+    type:'bar', data:{labels:['🔴 Высокий','🟡 Средний','🟢 Низкий'], datasets:[
+      {label:'Всего',data:['Высокий','Средний','Низкий'].map(p=>byPrio[p].total),backgroundColor:'#fca5a5'},
+      {label:'Выполнено',data:['Высокий','Средний','Низкий'].map(p=>byPrio[p].done),backgroundColor:'#6ee7b7'}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}
+  });
+
+  const deptName = {okk:'ОКК',or:'ОР',sklad:'Склад'};
+  const allContainer = document.getElementById('plan-all-list');
+  if (allContainer) {
+    let html = '<div style="overflow-x:auto"><table class="hist-table"><thead><tr>'
+      +'<th>Неделя</th><th>Отдел</th><th>Цель</th><th>Задача</th><th>Приоритет</th><th>Статус</th><th>Вывод</th>'
+      +'</tr></thead><tbody>';
+    data.slice().reverse().slice(0,40).forEach(t=>{
+      html+=`<tr>
+        <td>Нед ${t.week_number}/${t.year}</td>
+        <td>${deptName[t.dept]||t.dept}</td>
+        <td style="font-size:12px;color:var(--muted)">${t.plan_goals?.title||'—'}</td>
+        <td>${t.title}</td><td>${t.priority}</td>
+        <td>${t.done?'<span class="badge badge-ok">✓ Выполнено</span>':'<span class="badge badge-warn">В работе</span>'}</td>
+        <td style="max-width:180px;font-size:12px;color:var(--muted)">${t.conclusion||'—'}</td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+    allContainer.innerHTML = html;
+  }
+}
+
+function filterPlanDash(dept, el) {
+  document.querySelectorAll('#plan-dept-plan-dash .period-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  loadPlanDash(dept);
+}
+
+</script>
+</body>
+</html>
