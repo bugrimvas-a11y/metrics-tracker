@@ -1365,6 +1365,10 @@ async function renderPlanDept(dept) {
       .order('year').order('week_number').order('created_at');
     const allTasks = at || [];
 
+    // Cache closed tasks for filtering
+    if (!window._closedTasksCache) window._closedTasksCache = {};
+    window._closedTasksCache[g.id] = allTasks.filter(t => t.done || t.cancelled);
+
     // Group tasks by week
     const tasksByWeek = {};
     allTasks.forEach(t => {
@@ -1403,23 +1407,38 @@ async function renderPlanDept(dept) {
       </div>`;
     }
 
-    // ── All tasks grouped by week ──────────────────────
+    // ── Tasks split: active / done+cancelled ──────────
     html += `<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">`;
 
-    if (weekKeys.length === 0) {
-      html += '<p style="font-size:13px;color:var(--muted);margin-bottom:12px">Задач пока нет — добавьте первую</p>';
+    // Split tasks
+    const activeTasks = allTasks.filter(t => !t.done && !t.cancelled);
+    const closedTasks = allTasks.filter(t => t.done || t.cancelled);
+
+    // Active tasks grouped by week
+    const activeByWeek = {};
+    activeTasks.forEach(t => {
+      const key = t.year + '-W' + String(t.week_number).padStart(2,'0');
+      if (!activeByWeek[key]) activeByWeek[key] = { week_number: t.week_number, year: t.year, tasks: [] };
+      activeByWeek[key].tasks.push(t);
+    });
+    const activeWeekKeys = Object.keys(activeByWeek).sort();
+
+    html += `<div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">
+      Активные задачи (${activeTasks.length})
+    </div>`;
+
+    if (activeWeekKeys.length === 0) {
+      html += '<p style="font-size:13px;color:var(--muted);margin-bottom:12px">Нет активных задач</p>';
     }
 
-    weekKeys.forEach(wk => {
-      const { week_number, year, tasks: weekTaskList } = tasksByWeek[wk];
+    activeWeekKeys.forEach(wk => {
+      const { week_number, year, tasks: weekTaskList } = activeByWeek[wk];
       const isCurrentWeek = w && week_number === w.week_number && year === w.year;
-      const doneCnt = weekTaskList.filter(t=>t.done).length;
       html += `<div style="margin-bottom:14px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
           <span style="font-size:11px;font-weight:600;color:${isCurrentWeek?'var(--accent)':'var(--muted)'};text-transform:uppercase;letter-spacing:.05em">
             ${isCurrentWeek ? '📋 Текущая неделя' : '📁 Нед '+week_number+'/'+year}
           </span>
-          <span style="font-size:11px;color:var(--muted)">${doneCnt}/${weekTaskList.length} выполнено</span>
           ${isCurrentWeek ? '<span style="font-size:10px;background:var(--accent);color:#fff;padding:1px 6px;border-radius:10px">активна</span>' : ''}
         </div>`;
       weekTaskList.forEach(t => {
@@ -1460,7 +1479,51 @@ async function renderPlanDept(dept) {
       </div>`;
       }); // end weekTaskList.forEach
       html += '</div>'; // end week group
-    }); // end weekKeys.forEach
+    }); // end activeWeekKeys.forEach
+
+    // ── Closed tasks (done + cancelled) with period filter ──
+    const goalId_for_closed = g.id;
+    const closedPeriods = [
+      { key: 'week', label: 'Неделя' },
+      { key: 'month', label: 'Месяц' },
+      { key: 'quarter', label: 'Квартал' },
+      { key: 'year', label: 'Год' },
+      { key: 'all', label: 'Всё время' }
+    ];
+
+    if (closedTasks.length > 0) {
+      html += `<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">
+              История задач (${closedTasks.length})
+            </div>
+            <button onclick="toggleClosedTasks('${g.id}')"
+              id="toggle-hist-${g.id}"
+              style="font-size:11px;padding:3px 10px;border-radius:20px;border:0.5px solid var(--border);
+              background:transparent;color:var(--muted);cursor:pointer">
+              Показать
+            </button>
+          </div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;display:none" id="hist-period-${g.id}">
+            ${closedPeriods.map(p => `<button onclick="filterClosedTasks('${g.id}','${dept}','${p.key}',this)"
+              style="font-size:11px;padding:3px 10px;border-radius:20px;border:0.5px solid var(--border);
+              background:${p.key==='week'?'var(--color-text-primary, #1e293b)':'transparent'};
+              color:${p.key==='week'?'var(--color-bg, #fff)':'var(--muted)'};cursor:pointer">
+              ${p.label}
+            </button>`).join('')}
+          </div>
+        </div>
+        <div id="closed-tasks-${g.id}" style="display:none"></div>
+      </div>`;
+    }
+
+    // Render closed tasks with default 'week' period
+    if (closedTasks.length > 0) {
+      window._closedTasksCache = window._closedTasksCache || {};
+      window._closedTasksCache[g.id] = closedTasks;
+      // Render after HTML is set - use setTimeout to ensure DOM exists
+    }
 
     // Add task form
     html += `<div style="margin-top:10px;padding:12px;background:var(--bg);border-radius:var(--radius-sm)">
@@ -1527,6 +1590,18 @@ async function renderPlanDept(dept) {
   }
 
   body.innerHTML = html;
+
+  // Pre-cache closed tasks but don't render (hidden by default)
+  list.filter(g => !g.closed).forEach(g => {
+    const closed = (window._closedTasksCache || {})[g.id] || [];
+    if (closed.length) {
+      renderClosedTasksList(g.id, closed.filter(t => {
+        const d = new Date(t.year, 0, 1);
+        d.setDate(d.getDate() + (t.week_number - 1) * 7);
+        return (new Date() - d) / (1000*60*60*24) <= 7;
+      }));
+    }
+  });
 }
 
 // ── Goal CRUD ─────────────────────────────────────────────
@@ -1824,6 +1899,93 @@ async function loadPlanDash(deptFilter) {
   }
 }
 
+
+
+function toggleClosedTasks(goalId) {
+  const tasksDiv = document.getElementById('closed-tasks-' + goalId);
+  const periodsDiv = document.getElementById('hist-period-' + goalId);
+  const btn = document.getElementById('toggle-hist-' + goalId);
+  if (!tasksDiv) return;
+  const isHidden = tasksDiv.style.display === 'none';
+  tasksDiv.style.display = isHidden ? 'block' : 'none';
+  if (periodsDiv) periodsDiv.style.display = isHidden ? 'flex' : 'none';
+  if (btn) btn.textContent = isHidden ? 'Скрыть' : 'Показать';
+}
+// ── Filter closed tasks by period ────────────────────
+function filterClosedTasks(goalId, dept, period, el) {
+  // Update button styles
+  const container = document.getElementById('hist-period-' + goalId);
+  if (container) {
+    container.querySelectorAll('button').forEach(b => {
+      b.style.background = 'transparent';
+      b.style.color = 'var(--muted)';
+    });
+    if (el) {
+      el.style.background = 'var(--color-text-primary, #1e293b)';
+      el.style.color = '#fff';
+    }
+  }
+
+  const allClosed = window._closedTasksCache?.[goalId] || [];
+  const now = new Date();
+  let filtered = allClosed;
+
+  if (period === 'week') {
+    filtered = allClosed.filter(t => {
+      const d = new Date(t.year, 0, 1);
+      d.setDate(d.getDate() + (t.week_number - 1) * 7);
+      const diff = (now - d) / (1000*60*60*24);
+      return diff <= 7;
+    });
+  } else if (period === 'month') {
+    filtered = allClosed.filter(t => {
+      const d = new Date(t.year, 0, 1);
+      d.setDate(d.getDate() + (t.week_number - 1) * 7);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+  } else if (period === 'quarter') {
+    const q = Math.floor(now.getMonth() / 3);
+    filtered = allClosed.filter(t => {
+      const d = new Date(t.year, 0, 1);
+      d.setDate(d.getDate() + (t.week_number - 1) * 7);
+      return Math.floor(d.getMonth() / 3) === q && d.getFullYear() === now.getFullYear();
+    });
+  } else if (period === 'year') {
+    filtered = allClosed.filter(t => t.year === now.getFullYear());
+  }
+
+  renderClosedTasksList(goalId, filtered);
+}
+
+function renderClosedTasksList(goalId, tasks) {
+  const container = document.getElementById('closed-tasks-' + goalId);
+  if (!container) return;
+
+  if (!tasks.length) {
+    container.innerHTML = '<p style="font-size:13px;color:var(--muted)">Нет задач за этот период</p>';
+    return;
+  }
+
+  let html = '';
+  tasks.forEach(t => {
+    const isCancelled = !!t.cancelled;
+    html += `<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--border);opacity:${isCancelled?'.65':'1'}">
+      <div style="width:18px;height:18px;border-radius:4px;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:11px;
+        background:${isCancelled?'#fecaca':'#d1fae5'};color:${isCancelled?'#dc2626':'#059669'}">
+        ${isCancelled ? '✕' : '✓'}
+      </div>
+      <div style="flex:1">
+        <div style="font-size:13px;text-decoration:line-through;color:var(--muted)">${t.title}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">
+          Нед ${t.week_number}/${t.year} · ${t.priority}
+          ${isCancelled && t.cancel_reason ? ` · <span style="color:#dc2626">Причина: ${t.cancel_reason}</span>` : ''}
+          ${!isCancelled && t.conclusion ? ` · <span style="color:#059669">Вывод: ${t.conclusion}</span>` : ''}
+        </div>
+      </div>
+    </div>`;
+  });
+  container.innerHTML = html;
+}
 </script>
 </body>
 </html>
