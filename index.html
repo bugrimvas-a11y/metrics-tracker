@@ -1634,7 +1634,7 @@ async function loadPlanDash(deptFilter) {
       {label:'Всего',data:wLabels.map(k=>byWeek[k].total),backgroundColor:'#bfdbfe'},
       {label:'Выполнено',data:wLabels.map(k=>byWeek[k].done),backgroundColor:'#6ee7b7'}
     ]},
-    options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:22}},plugins:{legend:{display:false}}},
+    options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:32}},plugins:{legend:{display:false}}},
     plugins:[barLabelsPlugin]
   });
 
@@ -1647,7 +1647,7 @@ async function loadPlanDash(deptFilter) {
       {label:'Всего',data:['Высокий','Средний','Низкий'].map(p=>byPrio[p].total),backgroundColor:'#fca5a5'},
       {label:'Выполнено',data:['Высокий','Средний','Низкий'].map(p=>byPrio[p].done),backgroundColor:'#6ee7b7'}
     ]},
-    options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:22}},plugins:{legend:{display:false}}},
+    options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:32}},plugins:{legend:{display:false}}},
     plugins:[barLabelsPlugin]
   });
 
