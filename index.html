@@ -163,6 +163,7 @@
       <p>Еженедельное заполнение</p>
     </div>
     <nav class="sidebar-nav">
+      <div style="font-size:10px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;padding:4px 10px 6px">Трекер метрик</div>
       <div class="nav-item active" onclick="showPage('obr',this)">
         <span class="nav-icon">💬</span> Обработка запросов
       </div>
@@ -181,6 +182,8 @@
       <div class="nav-item" onclick="openDik(this)">
         <span class="nav-icon">🔒</span> Метрики директора
       </div>
+      <div style="height:1px;background:#334155;margin:10px 4px"></div>
+      <div style="font-size:10px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;padding:8px 10px 6px">Планирование</div>
       <div class="nav-item" onclick="showPage('plan',this)">
         <span class="nav-icon">📅</span> Планирование
       </div>
@@ -414,29 +417,78 @@
 
       <div id="dash-obr">
         <div class="kpi-grid" id="kpi-obr"></div>
-        <div class="card"><div class="card-title">Оценка клиентов по неделям</div>
-          <div class="chart-box" style="height:200px"><canvas id="ch-obr-score"></canvas></div></div>
-        <div class="card"><div class="card-title">Запросы и просроченные</div>
-          <div class="chart-box" style="height:200px"><canvas id="ch-obr-reqs"></canvas></div></div>
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+            <div class="card-title" style="margin-bottom:0">Динамика метрики</div>
+            <select id="sel-obr" onchange="renderMetricChart('obr')" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;color:var(--text);background:var(--surface)">
+              <option value="score">Оценка клиентов</option>
+              <option value="total_requests">Кол-во запросов</option>
+              <option value="expired_requests">Просроченных запросов</option>
+            </select>
+          </div>
+          <div class="chart-box" style="height:220px"><canvas id="ch-obr-main"></canvas></div>
+        </div>
       </div>
       <div id="dash-okk" style="display:none">
         <div class="kpi-grid" id="kpi-okk"></div>
-        <div class="card"><div class="card-title">Брак и восстановление</div>
-          <div class="chart-box" style="height:200px"><canvas id="ch-okk-brak"></canvas></div></div>
-        <div class="card"><div class="card-title">Рекламации поставщикам</div>
-          <div class="chart-box" style="height:200px"><canvas id="ch-okk-rec"></canvas></div></div>
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+            <div class="card-title" style="margin-bottom:0">Динамика метрики</div>
+            <select id="sel-okk" onchange="renderMetricChart('okk')" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;color:var(--text);background:var(--surface)">
+              <option value="rejected">Забраковано (шт.)</option>
+              <option value="restored">Восстановлено (шт.)</option>
+              <option value="no_solution">Без решения (шт.)</option>
+              <option value="sort_count">Сортировка (шт.)</option>
+              <option value="sort_sum">Сортировка (руб.)</option>
+              <option value="opt_count">Выведено в ОПТ (шт.)</option>
+              <option value="opt_sum">Выведено в ОПТ (руб.)</option>
+              <option value="rec_new">Рекламаций новых</option>
+              <option value="rec_in_work">Рекламаций в работе</option>
+              <option value="rec_done">Рекламаций завершено</option>
+              <option value="trainings">Обучений</option>
+              <option value="inspections">Инспекций</option>
+              <option value="feedback_total">Обр. связь всего</option>
+              <option value="feedback_expired">Обр. связь просроч.</option>
+            </select>
+          </div>
+          <div class="chart-box" style="height:220px"><canvas id="ch-okk-main"></canvas></div>
+        </div>
       </div>
       <div id="dash-sklad" style="display:none">
         <div class="kpi-grid" id="kpi-sklad"></div>
-        <div class="card"><div class="card-title">Движение товара (шт.)</div>
-          <div class="chart-box" style="height:200px"><canvas id="ch-sklad"></canvas></div></div>
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+            <div class="card-title" style="margin-bottom:0">Динамика метрики</div>
+            <select id="sel-sklad" onchange="renderMetricChart('sklad')" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;color:var(--text);background:var(--surface)">
+              <option value="alt_sum">Остаток «Альт» (руб.)</option>
+              <option value="contractor_count">Подрядчики (шт.)</option>
+              <option value="contractor_sum">Подрядчики (руб.)</option>
+              <option value="brak_count">Остаток брака (шт.)</option>
+              <option value="brak_sum">Остаток брака (руб.)</option>
+              <option value="cons_count">Консолидация (шт.)</option>
+              <option value="cons_sum">Консолидация (руб.)</option>
+            </select>
+          </div>
+          <div class="chart-box" style="height:220px"><canvas id="ch-sklad-main"></canvas></div>
+        </div>
       </div>
       <div id="dash-or" style="display:none">
         <div class="kpi-grid" id="kpi-or"></div>
-        <div class="card"><div class="card-title">Рекламации и ошибки</div>
-          <div class="chart-box" style="height:200px"><canvas id="ch-or"></canvas></div></div>
-        <div class="card"><div class="card-title">Среднее время закрытия (ч)</div>
-          <div class="chart-box" style="height:200px"><canvas id="ch-or-time"></canvas></div></div>
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+            <div class="card-title" style="margin-bottom:0">Динамика метрики</div>
+            <select id="sel-or" onchange="renderMetricChart('or')" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;color:var(--text);background:var(--surface)">
+              <option value="closed_recs">Завершённых задач</option>
+              <option value="errors">Ошибок при разборе</option>
+              <option value="avg_close_hours">Ср. время закрытия (сек)</option>
+              <option value="accept_time">Ср. время принятия (сек)</option>
+              <option value="score_speed">Оценка скорости</option>
+              <option value="score_lk">Оценка удобства ЛК</option>
+              <option value="feedback">Обратная связь</option>
+            </select>
+          </div>
+          <div class="chart-box" style="height:220px"><canvas id="ch-or-main"></canvas></div>
+        </div>
       </div>
     </div>
 
@@ -799,9 +851,23 @@ function mkChart(id, cfg) {
   charts[id] = new Chart(el, { ...cfg, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, ...cfg.options } });
 }
 
-function kpiCard(label, val, sub, status) {
+function kpiCard(label, val, sub, status, trend) {
   const colors = { ok: '#16a34a', warn: '#d97706', err: '#dc2626', '': 'var(--muted)' };
-  return `<div class="kpi-card"><div class="kpi-val">${val}</div><div class="kpi-label">${label}</div>${sub ? `<div class="kpi-sub" style="color:${colors[status||'']};">${sub}</div>` : ''}</div>`;
+  let trendHtml = '';
+  if (trend !== undefined && trend !== null) {
+    const isGood = trend >= 0;
+    const arrow = trend > 0 ? '▲' : trend < 0 ? '▼' : '→';
+    const color = trend === 0 ? 'var(--muted)' : (isGood ? '#16a34a' : '#dc2626');
+    const pct = Math.abs(trend).toFixed(1);
+    trendHtml = `<div style="font-size:11px;color:${color};font-weight:600;margin-top:3px">${arrow} ${pct}% vs прошлый период</div>`;
+  }
+  return `<div class="kpi-card"><div class="kpi-val">${val}</div><div class="kpi-label">${label}</div>${trendHtml}${sub ? `<div class="kpi-sub" style="color:${colors[status||'']};">${sub}</div>` : ''}</div>`;
+}
+
+function calcTrend(curr, prev, lowerIsBetter) {
+  if (prev === null || prev === undefined || prev === 0 || curr === null || curr === undefined) return null;
+  const pct = ((curr - prev) / Math.abs(prev)) * 100;
+  return lowerIsBetter ? -pct : pct;
 }
 
 
@@ -899,70 +965,175 @@ function aggregateRows(rows) {
   return result;
 }
 
+// Cache for chart data
+const dashCache = {};
+
+async function renderMetricChart(dep) {
+  const cached = dashCache[dep];
+  if (!cached) return;
+  const { labels, data } = cached;
+  const sel = document.getElementById('sel-' + dep);
+  if (!sel) return;
+  const field = sel.value;
+  const label = sel.options[sel.selectedIndex].text;
+  const chartId = 'ch-' + dep + '-main';
+  destroyChart(chartId);
+  const el = document.getElementById(chartId);
+  if (!el) return;
+
+  const values = data.map(r => r[field] ?? null);
+
+  // Point colors: green if better than prev, red if worse, blue for first
+  const pointColors = values.map((v, i) => {
+    if (i === 0 || values[i-1] === null || v === null) return '#2563eb';
+    return v >= values[i-1] ? '#16a34a' : '#dc2626';
+  });
+
+  // Segment colors for line
+  const segmentColors = values.map((v, i) => {
+    if (i === 0 || values[i-1] === null || v === null) return '#93c5fd';
+    return v >= values[i-1] ? '#16a34a' : '#dc2626';
+  });
+
+  Chart.register({
+    id: 'valueLabels',
+    afterDatasetsDraw(chart) {
+      const { ctx, data } = chart;
+      chart.data.datasets.forEach((dataset, i) => {
+        const meta = chart.getDatasetMeta(i);
+        meta.data.forEach((point, idx) => {
+          const val = dataset.data[idx];
+          if (val === null || val === undefined) return;
+          const display = Math.abs(val) >= 10000
+            ? (val/1000).toFixed(1) + ' тыс'
+            : typeof val === 'number' && !Number.isInteger(val)
+              ? val.toFixed(2)
+              : val.toLocaleString('ru');
+          ctx.save();
+          ctx.font = '500 11px sans-serif';
+          ctx.fillStyle = point.options?.backgroundColor || '#2563eb';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(display, point.x, point.y - 10);
+          ctx.restore();
+        });
+      });
+    }
+  });
+
+  charts[chartId] = new Chart(el, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label,
+        data: values,
+        borderColor: '#2563eb',
+        borderWidth: 2.5,
+        pointBackgroundColor: pointColors,
+        pointBorderColor: pointColors,
+        pointRadius: 6,
+        pointHoverRadius: 8,
+        tension: 0.3,
+        fill: {
+          target: 'origin',
+          above: 'rgba(37,99,235,0.07)',
+          below: 'rgba(220,38,38,0.07)'
+        },
+        segment: {
+          borderColor: ctx => {
+            const i = ctx.p1DataIndex;
+            return segmentColors[i] || '#2563eb';
+          }
+        }
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        datalabels: false,
+        tooltip: {
+          callbacks: {
+            title: ctx => ctx[0].label,
+            label: ctx => ' ' + label + ': ' + (ctx.raw ?? '—'),
+            afterLabel: ctx => {
+              const i = ctx.dataIndex;
+              if (i === 0 || values[i-1] === null || values[i] === null) return '';
+              const diff = values[i] - values[i-1];
+              const pct = ((diff / Math.abs(values[i-1])) * 100).toFixed(1);
+              const arrow = diff > 0 ? '▲ +' : diff < 0 ? '▼ ' : '→ ';
+              return arrow + pct + '% к предыдущему периоду';
+            }
+          }
+        }
+      },
+      layout: { padding: { top: 24 } },
+      scales: {
+        x: {
+          grid: { color: 'rgba(0,0,0,0.05)' },
+          ticks: { font: { size: 11 } }
+        },
+        y: {
+          beginAtZero: false,
+          grid: { color: 'rgba(0,0,0,0.05)' },
+          ticks: { font: { size: 11 } }
+        }
+      }
+    }
+  });
+}
+
 async function loadDash(dep) {
   const { labels, rows: data } = await fetchAggregated(dep);
   if (!data || !data.length) return;
   const last = data[data.length - 1] || {};
+  const prev = data[data.length - 2] || null;
 
   if (dep === 'obr') {
     const score = last.score?.toFixed(2) ?? '—';
     const pct = last.total_requests ? (last.expired_requests / last.total_requests * 100).toFixed(1) + '%' : '—';
     document.getElementById('kpi-obr').innerHTML =
-      kpiCard('Оценка клиентов', score, last.score ? (last.score >= 4.8 ? '✓ норма' : '✗ ниже нормы') : '', last.score ? (last.score >= 4.8 ? 'ok' : 'err') : '') +
-      kpiCard('Запросов за неделю', (last.total_requests ?? '—').toLocaleString()) +
-      kpiCard('Просроченных', last.expired_requests ?? '—', '% от общего: ' + pct, last.total_requests && (last.expired_requests / last.total_requests) > 0.01 ? 'err' : 'ok');
+      kpiCard('Оценка клиентов', score, last.score ? (last.score >= 4.8 ? '✓ норма' : '✗ ниже нормы') : '', last.score ? (last.score >= 4.8 ? 'ok' : 'err') : '', calcTrend(last.score, prev?.score, false)) +
+      kpiCard('Запросов за неделю', (last.total_requests ?? '—').toLocaleString(), '', '', calcTrend(last.total_requests, prev?.total_requests, false)) +
+      kpiCard('Просроченных', last.expired_requests ?? '—', '% от общего: ' + pct, last.total_requests && (last.expired_requests / last.total_requests) > 0.01 ? 'err' : 'ok', calcTrend(last.expired_requests, prev?.expired_requests, true));
 
-    mkChart('ch-obr-score', { type: 'line', data: { labels, datasets: [
-      { label: 'Оценка', data: data.map(r => r.score), borderColor: '#2563eb', tension: .3, fill: false, pointRadius: 4 },
-      { label: 'Норма', data: labels.map(() => 4.8), borderColor: '#dc2626', borderDash: [6, 3], pointRadius: 0 }
-    ]}});
-    mkChart('ch-obr-reqs', { type: 'bar', data: { labels, datasets: [
-      { label: 'Всего', data: data.map(r => r.total_requests), backgroundColor: '#93c5fd' },
-      { label: 'Просроченных', data: data.map(r => r.expired_requests), backgroundColor: '#fca5a5' }
-    ]}});
+    dashCache['obr'] = { labels, data };
+    renderMetricChart('obr');
   } else if (dep === 'okk') {
     document.getElementById('kpi-okk').innerHTML =
-      kpiCard('Брак (шт.)', last.rejected ?? '—') +
-      kpiCard('Восстановлено', last.restored ?? '—') +
-      kpiCard('Рекламаций новых', last.rec_new ?? '—') +
-      kpiCard('Обучений', last.trainings ?? '—');
-
-    mkChart('ch-okk-brak', { type: 'bar', data: { labels, datasets: [
-      { label: 'Брак', data: data.map(r => r.rejected), backgroundColor: '#fca5a5' },
-      { label: 'Восстановлено', data: data.map(r => r.restored), backgroundColor: '#86efac' },
-      { label: 'Без решения', data: data.map(r => r.no_solution), backgroundColor: '#fcd34d' }
-    ]}});
-    mkChart('ch-okk-rec', { type: 'line', data: { labels, datasets: [
-      { label: 'Новых', data: data.map(r => r.rec_new), borderColor: '#dc2626', tension: .3, pointRadius: 4 },
-      { label: 'Завершённых', data: data.map(r => r.rec_done), borderColor: '#16a34a', tension: .3, pointRadius: 4 }
-    ]}});
+      kpiCard('Брак (шт.)', last.rejected ?? '—', '', '', calcTrend(last.rejected, prev?.rejected, true)) +
+      kpiCard('Восстановлено', last.restored ?? '—', '', '', calcTrend(last.restored, prev?.restored, false)) +
+      kpiCard('Рекламаций новых', last.rec_new ?? '—', '', '', calcTrend(last.rec_new, prev?.rec_new, true)) +
+      kpiCard('Обучений', last.trainings ?? '—', '', '', calcTrend(last.trainings, prev?.trainings, false)) +
+      kpiCard('Инспекций', last.inspections ?? '—', '', '', calcTrend(last.inspections, prev?.inspections, false)) +
+      kpiCard('Обр. связь просроч.', last.feedback_expired ?? '—', '', '', calcTrend(last.feedback_expired, prev?.feedback_expired, true));
+    dashCache['okk'] = { labels, data };
+    renderMetricChart('okk');
   } else if (dep === 'sklad') {
     const altWarn = last.alt_sum >= 500000;
     document.getElementById('kpi-sklad').innerHTML =
-      kpiCard('Остаток «Альт»', last.alt_sum ? last.alt_sum.toLocaleString('ru') + ' ₽' : '—', altWarn ? '⚠ требует контроля' : '', altWarn ? 'warn' : '') +
-      kpiCard('Подрядчики (шт.)', last.contractor_count ?? '—') +
-      kpiCard('Остаток брака', last.brak_count ?? '—') +
-      kpiCard('Консолидация (шт.)', last.cons_count ?? '—');
-
-    mkChart('ch-sklad', { type: 'bar', data: { labels, datasets: [
-      { label: 'Подрядчики', data: data.map(r => r.contractor_count), backgroundColor: '#a5b4fc' },
-      { label: 'Консолидация', data: data.map(r => r.cons_count), backgroundColor: '#6ee7b7' },
-      { label: 'Остаток', data: data.map(r => r.brak_count), backgroundColor: '#fca5a5' }
-    ]}});
+      kpiCard('Остаток «Альт»', last.alt_sum ? last.alt_sum.toLocaleString('ru') + ' ₽' : '—', altWarn ? '⚠ требует контроля' : '', altWarn ? 'warn' : '', calcTrend(last.alt_sum, prev?.alt_sum, true)) +
+      kpiCard('Подрядчики (шт.)', last.contractor_count ?? '—', '', '', calcTrend(last.contractor_count, prev?.contractor_count, false)) +
+      kpiCard('Подрядчики (руб.)', last.contractor_sum ? last.contractor_sum.toLocaleString('ru') + ' ₽' : '—', '', '', calcTrend(last.contractor_sum, prev?.contractor_sum, false)) +
+      kpiCard('Остаток брака (шт.)', last.brak_count ?? '—', '', '', calcTrend(last.brak_count, prev?.brak_count, true)) +
+      kpiCard('Остаток брака (руб.)', last.brak_sum ? last.brak_sum.toLocaleString('ru') + ' ₽' : '—', '', '', calcTrend(last.brak_sum, prev?.brak_sum, true)) +
+      kpiCard('Консолидация (шт.)', last.cons_count ?? '—', '', '', calcTrend(last.cons_count, prev?.cons_count, false));
+    dashCache['sklad'] = { labels, data };
+    renderMetricChart('sklad');
   } else if (dep === 'or') {
     document.getElementById('kpi-or').innerHTML =
-      kpiCard('Закрыто рекламаций', last.closed_recs ?? '—') +
-      kpiCard('Ошибок', last.errors ?? '—', last.errors > 0 ? 'есть ошибки' : '', last.errors > 0 ? 'warn' : 'ok') +
-      kpiCard('Ср. время, ч', last.avg_close_hours ?? '—') +
-      kpiCard('Обратная связь', last.feedback ?? '—');
-
-    mkChart('ch-or', { type: 'bar', data: { labels, datasets: [
-      { label: 'Закрыто', data: data.map(r => r.closed_recs), backgroundColor: '#93c5fd' },
-      { label: 'Ошибки', data: data.map(r => r.errors), backgroundColor: '#fca5a5' }
-    ]}});
-    mkChart('ch-or-time', { type: 'line', data: { labels, datasets: [
-      { label: 'Ср. время', data: data.map(r => r.avg_close_hours), borderColor: '#f59e0b', tension: .3, fill: false, pointRadius: 4 }
-    ]}});
+      kpiCard('Завершённых задач', last.closed_recs ?? '—', '', '', calcTrend(last.closed_recs, prev?.closed_recs, false)) +
+      kpiCard('Ошибок при разборе', last.errors ?? '—', last.errors > 0 ? 'есть ошибки' : '', last.errors > 0 ? 'warn' : 'ok', calcTrend(last.errors, prev?.errors, true)) +
+      kpiCard('Ср. время закрытия (сек)', last.avg_close_hours ?? '—', '', '', calcTrend(last.avg_close_hours, prev?.avg_close_hours, true)) +
+      kpiCard('Ср. время принятия (сек)', last.accept_time ?? '—', '', '', calcTrend(last.accept_time, prev?.accept_time, true)) +
+      kpiCard('Оценка скорости', last.score_speed?.toFixed(1) ?? '—', last.score_speed >= 4.8 ? '✓ норма' : last.score_speed ? '✗ ниже нормы' : '', last.score_speed >= 4.8 ? 'ok' : 'err', calcTrend(last.score_speed, prev?.score_speed, false)) +
+      kpiCard('Оценка удобства ЛК', last.score_lk?.toFixed(1) ?? '—', last.score_lk >= 4.8 ? '✓ норма' : last.score_lk ? '✗ ниже нормы' : '', last.score_lk >= 4.8 ? 'ok' : 'err', calcTrend(last.score_lk, prev?.score_lk, false)) +
+      kpiCard('Обратная связь', last.feedback ?? '—', '', '', calcTrend(last.feedback, prev?.feedback, false));
+    dashCache['or'] = { labels, data };
+    renderMetricChart('or');
   }
 }
 
@@ -1159,18 +1330,20 @@ async function renderPlanDept(dept) {
     const g = activeGoals[idx];
     const w = getWeek();
 
-    // Load tasks for this week for this goal
-    let weekTasks = [], allTasks = [];
-    if (w) {
-      const { data: wt } = await db.from('plan_tasks')
-        .select('*').eq('goal_id', g.id)
-        .eq('week_number', w.week_number).eq('year', w.year)
-        .order('created_at');
-      weekTasks = wt || [];
-    }
-    // Load all tasks to show overall progress
-    const { data: at } = await db.from('plan_tasks').select('*').eq('goal_id', g.id);
-    allTasks = at || [];
+    // Load ALL tasks for this goal across all weeks
+    const { data: at } = await db.from('plan_tasks')
+      .select('*').eq('goal_id', g.id)
+      .order('year').order('week_number').order('created_at');
+    const allTasks = at || [];
+
+    // Group tasks by week
+    const tasksByWeek = {};
+    allTasks.forEach(t => {
+      const key = t.year + '-W' + String(t.week_number).padStart(2,'0');
+      if (!tasksByWeek[key]) tasksByWeek[key] = { week_number: t.week_number, year: t.year, tasks: [] };
+      tasksByWeek[key].tasks.push(t);
+    });
+    const weekKeys = Object.keys(tasksByWeek).sort();
 
     const totalAll = allTasks.length;
     const doneAll = allTasks.filter(t => t.done).length;
@@ -1201,16 +1374,26 @@ async function renderPlanDept(dept) {
       </div>`;
     }
 
-    // ── This week's tasks ──────────────────────────────
-    html += `<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">
-      <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:10px">
-        📋 ЗАДАЧИ НА ТЕКУЩУЮ НЕДЕЛЮ ${w ? '(Нед '+w.week_number+'/'+w.year+')' : ''}
-      </div>`;
+    // ── All tasks grouped by week ──────────────────────
+    html += `<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">`;
 
-    if (weekTasks.length === 0) {
-      html += '<p style="font-size:13px;color:var(--muted);margin-bottom:10px">Задач на эту неделю нет</p>';
+    if (weekKeys.length === 0) {
+      html += '<p style="font-size:13px;color:var(--muted);margin-bottom:12px">Задач пока нет — добавьте первую</p>';
     }
-    weekTasks.forEach(t => {
+
+    weekKeys.forEach(wk => {
+      const { week_number, year, tasks: weekTaskList } = tasksByWeek[wk];
+      const isCurrentWeek = w && week_number === w.week_number && year === w.year;
+      const doneCnt = weekTaskList.filter(t=>t.done).length;
+      html += `<div style="margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:11px;font-weight:600;color:${isCurrentWeek?'var(--accent)':'var(--muted)'};text-transform:uppercase;letter-spacing:.05em">
+            ${isCurrentWeek ? '📋 Текущая неделя' : '📁 Нед '+week_number+'/'+year}
+          </span>
+          <span style="font-size:11px;color:var(--muted)">${doneCnt}/${weekTaskList.length} выполнено</span>
+          ${isCurrentWeek ? '<span style="font-size:10px;background:var(--accent);color:#fff;padding:1px 6px;border-radius:10px">активна</span>' : ''}
+        </div>`;
+      weekTaskList.forEach(t => {
       const isCancelled = !!t.cancelled;
       const prioIcon = t.priority === 'Высокий' ? '<span class="priority-high">🔴 Высокий</span>'
         : t.priority === 'Средний' ? '<span class="priority-mid">🟡 Средний</span>'
@@ -1246,7 +1429,9 @@ async function renderPlanDept(dept) {
         </div>
         ${!t.done && !isCancelled ? `<button onclick="cancelPlanTask('${t.id}','${g.id}','${dept}')" class="task-delete" title="Отменить задачу" style="color:var(--warn);font-size:18px">✕</button>` : ''}
       </div>`;
-    });
+      }); // end weekTaskList.forEach
+      html += '</div>'; // end week group
+    }); // end weekKeys.forEach
 
     // Add task form
     html += `<div style="margin-top:10px;padding:12px;background:var(--bg);border-radius:var(--radius-sm)">
@@ -1428,12 +1613,29 @@ async function loadPlanDash(deptFilter) {
 
   destroyChart('ch-plan-dynamic');
   const el1 = document.getElementById('ch-plan-dynamic');
+
+  const barLabelsPlugin = {
+    id:'barLabels',
+    afterDatasetsDraw(chart){
+      const {ctx}=chart;
+      chart.data.datasets.forEach((ds,di)=>{
+        chart.getDatasetMeta(di).data.forEach((bar,idx)=>{
+          const v=ds.data[idx];
+          if(!v)return;
+          ctx.save();ctx.font='500 11px sans-serif';
+          ctx.fillStyle='#64748b';ctx.textAlign='center';ctx.textBaseline='bottom';
+          ctx.fillText(v,bar.x,bar.y-4);ctx.restore();
+        });
+      });
+    }
+  };
   if (el1) charts['ch-plan-dynamic'] = new Chart(el1, {
     type:'bar', data:{labels:wLabels, datasets:[
       {label:'Всего',data:wLabels.map(k=>byWeek[k].total),backgroundColor:'#bfdbfe'},
       {label:'Выполнено',data:wLabels.map(k=>byWeek[k].done),backgroundColor:'#6ee7b7'}
     ]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}
+    options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:22}},plugins:{legend:{display:false}}},
+    plugins:[barLabelsPlugin]
   });
 
   const byPrio = {'Высокий':{total:0,done:0},'Средний':{total:0,done:0},'Низкий':{total:0,done:0}};
@@ -1445,7 +1647,8 @@ async function loadPlanDash(deptFilter) {
       {label:'Всего',data:['Высокий','Средний','Низкий'].map(p=>byPrio[p].total),backgroundColor:'#fca5a5'},
       {label:'Выполнено',data:['Высокий','Средний','Низкий'].map(p=>byPrio[p].done),backgroundColor:'#6ee7b7'}
     ]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}
+    options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:22}},plugins:{legend:{display:false}}},
+    plugins:[barLabelsPlugin]
   });
 
   const deptName = {okk:'ОКК',or:'ОР',sklad:'Склад'};
@@ -1473,6 +1676,12 @@ function filterPlanDash(dept, el) {
   document.querySelectorAll('#plan-dept-plan-dash .period-btn').forEach(b=>b.classList.remove('active'));
   el.classList.add('active');
   loadPlanDash(dept);
+}
+
+</script>
+    dashCache['or'] = { labels, data };
+    renderMetricChart('or');
+  }
 }
 
 </script>
