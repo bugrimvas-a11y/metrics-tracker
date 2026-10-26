@@ -6,6 +6,7 @@
 <title>Трекер метрик</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root {
     --bg: #f8fafc; --surface: #ffffff; --border: #e2e8f0;
@@ -181,6 +182,11 @@
       </div>
       <div class="nav-item" onclick="openDik(this)">
         <span class="nav-icon">🔒</span> Метрики директора
+      </div>
+      <div style="height:1px;background:#334155;margin:10px 4px"></div>
+      <div style="font-size:10px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;padding:8px 10px 6px">Журнал</div>
+      <div class="nav-item" onclick="showPage('prob',this)">
+        <span class="nav-icon">🚩</span> Журнал проблем
       </div>
       <div style="height:1px;background:#334155;margin:10px 4px"></div>
       <div style="font-size:10px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;padding:8px 10px 6px">Планирование</div>
@@ -542,6 +548,56 @@
       </div>
     </div>
 
+    <!-- Журнал проблем -->
+    <div id="page-prob" class="page">
+      <div class="page-title">🚩 Журнал проблем</div>
+      <div class="page-sub">Фиксируйте проблемы отделов, меняйте статус и выгружайте список в Excel</div>
+
+      <div class="card">
+        <div class="card-title">Новая проблема</div>
+        <div class="form-grid">
+          <div class="field">
+            <label>Отдел</label>
+            <select id="prob-dept">
+              <option value="okk">ОКК</option>
+              <option value="or">ОР</option>
+              <option value="sklad">Склад Брак</option>
+              <option value="rest">Реставрация</option>
+              <option value="obr">Обработка запросов</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Описание проблемы</label>
+            <textarea id="prob-desc" rows="3" maxlength="2000" placeholder="Что случилось, где и в каком объёме"></textarea>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="prob-add-btn" onclick="addProblem()">Добавить в журнал</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+          <div class="sub-tabs" id="prob-tabs" style="margin-bottom:0">
+            <button class="sub-tab active" onclick="switchProbTab('new',this)">Не обработаны <span id="prob-count-new"></span></button>
+            <button class="sub-tab" onclick="switchProbTab('done',this)">Обработаны (последние 10)</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <select id="prob-filter-dept" onchange="loadProblems()" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text)">
+              <option value="">Все отделы</option>
+              <option value="okk">ОКК</option>
+              <option value="or">ОР</option>
+              <option value="sklad">Склад Брак</option>
+              <option value="rest">Реставрация</option>
+              <option value="obr">Обработка запросов</option>
+            </select>
+            <button class="btn" id="prob-export-btn" style="padding:6px 14px;font-size:13px" onclick="exportProblems()">⬇ Выгрузить в Excel</button>
+          </div>
+        </div>
+        <div id="prob-list" style="margin-top:16px"></div>
+      </div>
+    </div>
+
     <!-- Планирование -->
     <div id="page-plan" class="page">
       <div class="page-title">📅 Планирование</div>
@@ -674,6 +730,11 @@ function showPage(id, el) {
   el.classList.add('active');
   updateWeekLabels();
   if (id === 'dash') loadDash('obr');
+  else if (id === 'prob') loadProblems();
+  else if (id === 'plan') {
+    const t = document.querySelector('#plan-dept-tabs .sub-tab.active');
+    if (t) switchPlanDept(t.dataset.dept, t);
+  }
   else loadHistory(id);
 }
 
@@ -1985,6 +2046,152 @@ function renderClosedTasksList(goalId, tasks) {
     </div>`;
   });
   container.innerHTML = html;
+}
+
+// ══════════════════════════════════════════════════════════
+// ЖУРНАЛ ПРОБЛЕМ
+// ══════════════════════════════════════════════════════════
+const PROB_DEPTS = { obr: 'Обработка запросов', okk: 'ОКК', sklad: 'Склад Брак', or: 'ОР', rest: 'Реставрация' };
+let probTab = 'new';
+let probReqId = 0;
+
+function probEsc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function probFmt(d) {
+  if (!d) return '';
+  return new Date(d).toLocaleString('ru', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function switchProbTab(status, el) {
+  probTab = status;
+  document.querySelectorAll('#prob-tabs .sub-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  loadProblems();
+}
+
+async function loadProblems() {
+  const box = document.getElementById('prob-list');
+  if (!box) return;
+  const reqId = ++probReqId;
+  const dept = document.getElementById('prob-filter-dept').value;
+  box.innerHTML = '<div class="loading"><div class="spinner"></div>Загрузка...</div>';
+
+  let q = db.from('problems').select('*').eq('status', probTab);
+  if (dept) q = q.eq('dept', dept);
+  q = probTab === 'new'
+    ? q.order('created_at', { ascending: false })
+    : q.order('resolved_at', { ascending: false }).limit(10);
+
+  let cq = db.from('problems').select('id', { count: 'exact', head: true }).eq('status', 'new');
+  if (dept) cq = cq.eq('dept', dept);
+
+  const [{ data, error }, { count }] = await Promise.all([q, cq]);
+  if (reqId !== probReqId) return; // пришёл более новый запрос
+
+  const badge = document.getElementById('prob-count-new');
+  if (badge) badge.textContent = count != null ? `(${count})` : '';
+
+  if (error) {
+    box.innerHTML = `<div style="color:var(--err);font-size:13px">Не удалось загрузить журнал: ${probEsc(error.message)}
+      <button class="btn" style="margin-left:10px;padding:4px 12px;font-size:12px" onclick="loadProblems()">Повторить</button></div>`;
+    return;
+  }
+  if (!data || !data.length) {
+    box.innerHTML = `<p style="color:var(--muted);font-size:13px">${probTab === 'new' ? 'Необработанных проблем нет' : 'Обработанных проблем пока нет'}</p>`;
+    return;
+  }
+
+  box.innerHTML = data.map(p => {
+    const isNew = p.status === 'new';
+    const btn = isNew
+      ? `<button class="btn" style="font-size:12px;padding:5px 12px;color:var(--success);border-color:var(--success);white-space:nowrap" onclick="setProblemStatus('${probEsc(p.id)}','done',this)">✓ Обработана</button>`
+      : `<button class="btn" style="font-size:12px;padding:5px 12px;white-space:nowrap" onclick="setProblemStatus('${probEsc(p.id)}','new',this)">↩ Вернуть в работу</button>`;
+    return `<div style="display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">
+          <span class="badge ${isNew ? 'badge-warn' : 'badge-ok'}" style="margin-left:0">${probEsc(PROB_DEPTS[p.dept] || p.dept)}</span>
+          ${probEsc(probFmt(p.created_at))}${!isNew && p.resolved_at ? ' · обработана ' + probEsc(probFmt(p.resolved_at)) : ''}
+        </div>
+        <div style="font-size:14px;line-height:1.4;white-space:pre-wrap;word-break:break-word">${probEsc(p.description)}</div>
+      </div>
+      ${btn}
+    </div>`;
+  }).join('');
+}
+
+async function addProblem() {
+  const dept = document.getElementById('prob-dept').value;
+  const descEl = document.getElementById('prob-desc');
+  const description = descEl.value.trim();
+  if (!description) { showToast('Опишите проблему', true); return; }
+
+  const btn = document.getElementById('prob-add-btn');
+  btn.disabled = true; btn.textContent = 'Сохранение...';
+  const { error } = await db.from('problems').insert({ dept, description });
+  btn.disabled = false; btn.textContent = 'Добавить в журнал';
+
+  if (error) { showToast('Ошибка: ' + error.message, true); return; }
+  descEl.value = '';
+  showToast('Проблема добавлена в журнал');
+  if (probTab !== 'new') {
+    switchProbTab('new', document.querySelector('#prob-tabs .sub-tab'));
+  } else {
+    loadProblems();
+  }
+}
+
+async function setProblemStatus(id, status, btn) {
+  if (btn) btn.disabled = true;
+  const patch = { status, resolved_at: status === 'done' ? new Date().toISOString() : null };
+  const { data, error } = await db.from('problems').update(patch).eq('id', id).select('id');
+  if (error || !data || !data.length) {
+    if (btn) btn.disabled = false;
+    showToast('Не удалось изменить статус' + (error ? ': ' + error.message : ''), true);
+    return;
+  }
+  showToast(status === 'done' ? 'Отмечена как обработанная' : 'Возвращена в работу');
+  loadProblems();
+}
+
+async function exportProblems() {
+  if (typeof XLSX === 'undefined') { showToast('Библиотека выгрузки не загрузилась, обновите страницу', true); return; }
+  const btn = document.getElementById('prob-export-btn');
+  btn.disabled = true;
+  try {
+    const dept = document.getElementById('prob-filter-dept').value;
+    const rows = [];
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      let q = db.from('problems').select('*').order('created_at', { ascending: true }).range(from, from + PAGE - 1);
+      if (dept) q = q.eq('dept', dept);
+      const { data, error } = await q;
+      if (error) throw error;
+      rows.push(...data);
+      if (data.length < PAGE) break;
+    }
+    if (!rows.length) { showToast('Нет данных для выгрузки', true); return; }
+
+    const sheetRows = rows.map(p => ({
+      'Дата внесения': probFmt(p.created_at),
+      'Отдел': PROB_DEPTS[p.dept] || p.dept,
+      'Описание': p.description,
+      'Статус': p.status === 'done' ? 'Обработана' : 'Не обработана',
+      'Дата обработки': probFmt(p.resolved_at)
+    }));
+    const ws = XLSX.utils.json_to_sheet(sheetRows);
+    ws['!cols'] = [{ wch: 18 }, { wch: 20 }, { wch: 80 }, { wch: 16 }, { wch: 18 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Проблемы');
+    const today = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `zhurnal-problem_${dept || 'vse'}_${today}.xlsx`);
+    showToast(`Выгружено записей: ${rows.length}`);
+  } catch (e) {
+    showToast('Ошибка выгрузки: ' + (e.message || e), true);
+  } finally {
+    btn.disabled = false;
+  }
 }
 </script>
 </body>
