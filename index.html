@@ -98,6 +98,9 @@
   .hist-table td { padding: 9px 10px; border-bottom: 1px solid var(--border); }
   .hist-table tr:last-child td { border-bottom: none; }
   .hist-table tr:hover td { background: var(--bg); }
+  .hist-table th, .hist-table td { white-space: nowrap; }
+  .hist-sticky { position: sticky; left: 0; background: var(--surface); z-index: 1; }
+  .hist-table tr:hover td.hist-sticky { background: var(--bg); }
 
   /* Toast */
   .toast { position: fixed; bottom: 24px; right: 24px; background: #1e293b;
@@ -229,6 +232,7 @@
           <button class="btn btn-primary" id="obr-save-btn" onclick="saveForm('obr')">Сохранить</button>
         </div>
       </div>
+      <div id="ai-block-obr"></div>
       <div class="card">
         <div class="card-title">История (последние 8 недель)</div>
         <div id="obr-history"><div class="loading"><div class="spinner"></div>Загрузка...</div></div>
@@ -277,6 +281,7 @@
           <button class="btn btn-primary" id="okk-save-btn" onclick="saveForm('okk')">Сохранить</button>
         </div>
       </div>
+      <div id="ai-block-okk"></div>
       <div class="card">
         <div class="card-title">История (последние 8 недель)</div>
         <div id="okk-history"><div class="loading"><div class="spinner"></div>Загрузка...</div></div>
@@ -323,6 +328,7 @@
           <button class="btn btn-primary" id="sklad-save-btn" onclick="saveForm('sklad')">Сохранить</button>
         </div>
       </div>
+      <div id="ai-block-sklad"></div>
       <div class="card">
         <div class="card-title">История (последние 8 недель)</div>
         <div id="sklad-history"><div class="loading"><div class="spinner"></div>Загрузка...</div></div>
@@ -394,6 +400,7 @@
           <button class="btn btn-primary" id="or-save-btn" onclick="saveForm('or')">Сохранить</button>
         </div>
       </div>
+      <div id="ai-block-or"></div>
       <div class="card">
         <div class="card-title">История (последние 8 недель)</div>
         <div id="or-history"><div class="loading"><div class="spinner"></div>Загрузка...</div></div>
@@ -543,7 +550,7 @@
         </div>
       </div>
       <div class="card">
-        <div class="card-title">История (последние 8 недель)</div>
+        <div class="card-title">История (последние 8 месяцев)</div>
         <div id="dik-history"><div class="loading"><div class="spinner"></div>Загрузка...</div></div>
       </div>
     </div>
@@ -700,6 +707,103 @@ const db = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const charts = {};
 
+// ── Конфигурация показателей отделов ──────────────────────────────────────
+// Единый источник для формы, истории и текста для ИИ.
+// t: 'i' — целое, 'f' — число с дробью, 's' — текст; d — число знаков после запятой
+const DEP_CFG = {
+  obr: {
+    title: 'Обработка запросов', table: 'metrics_obr', monthly: false,
+    fields: [
+      { col: 'score', id: 'obr-score', t: 'f', d: 2, label: 'Оценка клиентов', short: 'Оценка' },
+      { col: 'total_requests', id: 'obr-total', t: 'i', label: 'Количество запросов', short: 'Запросов' },
+      { col: 'expired_requests', id: 'obr-expired', t: 'i', label: 'Просроченных запросов', short: 'Просроченных' }
+    ],
+    derived: [
+      { short: '% просрочки', label: 'Доля просроченных запросов',
+        calc: r => r.total_requests ? (r.expired_requests || 0) / r.total_requests * 100 : null }
+    ]
+  },
+  okk: {
+    title: 'ОКК (контроль качества)', table: 'metrics_okk', monthly: false,
+    fields: [
+      { col: 'rejected', id: 'okk-rejected', t: 'i', label: 'Забраковано всего, руб.', short: 'Забраковано, ₽' },
+      { col: 'restored', id: 'okk-restored', t: 'i', label: 'С решением по восстановлению, руб.', short: 'С решением, ₽' },
+      { col: 'no_solution', id: 'okk-no-solution', t: 'i', label: 'Без решения по восстановлению, руб.', short: 'Без решения, ₽' },
+      { col: 'sort_count', id: 'okk-sort-count', t: 'i', label: 'Количество сортировки, шт.', short: 'Сортировка, шт' },
+      { col: 'sort_sum', id: 'okk-sort-sum', t: 'f', label: 'Сумма сортировки, руб.', short: 'Сортировка, ₽' },
+      { col: 'opt_count', id: 'okk-opt-count', t: 'i', label: 'Выведено в ОПТ после сортировки, шт.', short: 'В ОПТ, шт' },
+      { col: 'opt_sum', id: 'okk-opt-sum', t: 'f', label: 'Выведено в ОПТ после сортировки, руб.', short: 'В ОПТ, ₽' },
+      { col: 'rec_new', id: 'okk-rec-new', t: 'i', label: 'Сформировано рекламаций поставщикам за неделю', short: 'Рекл. новых' },
+      { col: 'rec_in_work', id: 'okk-rec-work', t: 'i', label: 'Задач в работе по претензиям', short: 'Рекл. в работе' },
+      { col: 'rec_done', id: 'okk-rec-done', t: 'i', label: 'Завершённых задач по претензиям', short: 'Рекл. завершено' },
+      { col: 'trainings', id: 'okk-training', t: 'i', label: 'Количество обучений', short: 'Обучений' },
+      { col: 'inspections', id: 'okk-inspections', t: 'i', label: 'Количество инспекций', short: 'Инспекций' },
+      { col: 'feedback_total', id: 'okk-fb-total', t: 'i', label: 'Обратная связь, всего', short: 'Обр. связь' },
+      { col: 'feedback_expired', id: 'okk-fb-expired', t: 'i', label: 'Обратная связь, просроченных', short: 'Обр. связь просроч.' }
+    ]
+  },
+  sklad: {
+    title: 'Склад Брак', table: 'metrics_sklad', monthly: false,
+    fields: [
+      { col: 'alt_sum', id: 'sklad-alt-sum', t: 'f', label: 'Сумма остатка "Альт", руб.', short: 'Остаток "Альт", ₽' },
+      { col: 'contractor_count', id: 'sklad-cont-count', t: 'i', label: 'Отправлено подрядчикам, шт.', short: 'Подрядчикам, шт' },
+      { col: 'contractor_sum', id: 'sklad-cont-sum', t: 'f', label: 'Отправлено подрядчикам, руб.', short: 'Подрядчикам, ₽' },
+      { col: 'brak_count', id: 'sklad-brak-count', t: 'i', label: 'Остаток брака, шт.', short: 'Остаток брака, шт' },
+      { col: 'brak_sum', id: 'sklad-brak-sum', t: 'f', label: 'Остаток брака, руб.', short: 'Остаток брака, ₽' },
+      { col: 'cons_count', id: 'sklad-cons-count', t: 'i', label: 'Консолидация "один короб — один артикул", кол-во', short: 'Консолидация, кол.' },
+      { col: 'cons_sum', id: 'sklad-cons-sum', t: 'f', label: 'Консолидация "один короб — один артикул", руб.', short: 'Консолидация, ₽' }
+    ]
+  },
+  or: {
+    title: 'Отдел рекламаций (ОР)', table: 'metrics_or', monthly: false,
+    fields: [
+      { col: 'closed_recs', id: 'or-closed', t: 'i', label: 'Количество завершённых задач', short: 'Закрыто' },
+      { col: 'errors', id: 'or-errors', t: 'i', label: 'Ошибок при разборе рекламаций', short: 'Ошибок' },
+      { col: 'feedback', id: 'or-feedback', t: 'i', label: 'Обратная связь от смежных подразделений', short: 'Обр. связь' },
+      { col: 'main_reason', id: 'or-reason', t: 's', label: 'Основная причина обратной связи', short: 'Причина обр. связи' },
+      { col: 'avg_close_hours', id: 'or-avg-time', t: 'f', label: 'Среднее время закрытия, сек', short: 'Ср. закрытие, сек' },
+      { col: 'accept_time', id: 'or-accept-time', t: 'f', label: 'Среднее время принятия, сек', short: 'Ср. принятие, сек' },
+      { col: 'score_speed', id: 'or-score-speed', t: 'f', label: 'Оценка скорости обработки', short: 'Оценка скорости' },
+      { col: 'score_lk', id: 'or-score-lk', t: 'f', label: 'Оценка удобства ЛК', short: 'Оценка ЛК' }
+    ],
+    derived: [
+      { short: '% ошибок', label: 'Доля ошибок от завершённых задач',
+        calc: r => r.closed_recs ? (r.errors || 0) / r.closed_recs * 100 : null }
+    ]
+  },
+  dik: {
+    title: 'Метрики директора', table: 'metrics_dik', monthly: true,
+    fields: [
+      { col: 'rec_pct', id: 'dik-rec-pct', t: 'f', d: 2, label: 'Доля рекламаций, %', short: 'Доля рекл., %' },
+      { col: 'rec_money_pct', id: 'dik-rec-money-pct', t: 'f', d: 2, label: 'Доля рекламаций в деньгах, %', short: 'Доля в деньгах, %' },
+      { col: 'rec_sum', id: 'dik-rec-sum', t: 'f', label: 'Сумма рекламаций, руб.', short: 'Сумма рекл., ₽' },
+      { col: 'china_total', id: 'dik-china-total', t: 'i', label: 'Инспекций', short: 'Инспекций' },
+      { col: 'china_ok', id: 'dik-china-ok', t: 'i', label: 'Инспекций без просрочек', short: 'Без просрочек' }
+    ]
+  }
+};
+
+function fmtVal(f, v) {
+  if (v === null || v === undefined || v === '') return '—';
+  if (f.t === 's') return String(v);
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '—';
+  return n.toLocaleString('ru', { minimumFractionDigits: f.d ?? 0, maximumFractionDigits: f.d ?? 2 });
+}
+
+function fmtDate(d) {
+  return new Date(d).toLocaleDateString('ru', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+// Текущая неделя по той же формуле, что и неделя по умолчанию в боковой панели
+function currentWeekNow() {
+  const now = new Date();
+  const yr = now.getFullYear();
+  const start = new Date(yr, 0, 1);
+  const wn = Math.ceil(((now - start) / 86400000 + start.getDay() + 1) / 7);
+  return { year: yr, week: wn };
+}
+
 function getWeek() {
   const w = document.getElementById('global-week').value;
   if (!w) return null;
@@ -708,11 +812,8 @@ function getWeek() {
 }
 
 function setDefaultWeek() {
-  const now = new Date();
-  const yr = now.getFullYear();
-  const start = new Date(yr, 0, 1);
-  const wn = Math.ceil(((now - start) / 86400000 + start.getDay() + 1) / 7);
-  document.getElementById('global-week').value = `${yr}-W${String(wn).padStart(2, '0')}`;
+  const c = currentWeekNow();
+  document.getElementById('global-week').value = `${c.year}-W${String(c.week).padStart(2, '0')}`;
 }
 
 function showToast(msg, isError = false) {
@@ -735,7 +836,7 @@ function showPage(id, el) {
     const t = document.querySelector('#plan-dept-tabs .sub-tab.active');
     if (t) switchPlanDept(t.dataset.dept, t);
   }
-  else loadHistory(id);
+  else { loadHistory(id); ensureFormLoaded(id); }
 }
 
 function updateWeekLabels() {
@@ -743,7 +844,7 @@ function updateWeekLabels() {
   if (!w) return;
   ['obr', 'okk', 'sklad', 'or', 'dik'].forEach(d => {
     const el = document.getElementById(d + '-week-label');
-    if (el) el.textContent = `Неделя ${w.week_number}, ${w.year} г.`;
+    if (el) el.textContent = `Неделя ${w.week_number}, ${w.year} г.` + (corrText[d] || '');
   });
 }
 
@@ -753,70 +854,104 @@ document.getElementById('global-week').addEventListener('change', () => {
   if (active) {
     const id = active.id.replace('page-', '');
     if (id === 'dash') loadDash(document.querySelector('.sub-tab.active')?.dataset?.id || 'obr');
-    else loadHistory(id);
+    else { loadHistory(id); ensureFormLoaded(id); }
   }
 });
 
+// ── Период формы (неделя или месяц) ───────────────────────────────────────
+// isPast = период уже закончился: его заполнение или правка считается корректировкой
+function getPeriod(dep) {
+  if (dep === 'dik') {
+    const dm = getDikMonth();
+    if (!dm) return null;
+    const now = new Date();
+    return {
+      keys: { month_number: dm.month, year: dm.year },
+      conflict: 'month_number,year',
+      isPast: dm.year * 100 + dm.month < now.getFullYear() * 100 + (now.getMonth() + 1),
+      label: 'Метрики за ' + dm.label
+    };
+  }
+  const w = getWeek();
+  if (!w) return null;
+  const c = currentWeekNow();
+  return {
+    keys: { week_number: w.week_number, year: w.year },
+    conflict: 'week_number,year',
+    isPast: w.year * 100 + w.week_number < c.year * 100 + c.week,
+    label: `Неделя ${w.week_number}, ${w.year} г.`
+  };
+}
+
+function readForm(dep) {
+  const out = {};
+  DEP_CFG[dep].fields.forEach(f => {
+    const raw = document.getElementById(f.id).value.trim();
+    if (raw === '') { out[f.col] = null; return; }
+    if (f.t === 's') { out[f.col] = raw; return; }
+    const n = f.t === 'i' ? parseInt(raw, 10) : parseFloat(raw);
+    out[f.col] = Number.isFinite(n) ? n : null;
+  });
+  return out;
+}
+
+function sameVal(a, b) {
+  const na = (a === undefined || a === null || a === '') ? null : a;
+  const nb = (b === undefined || b === null || b === '') ? null : b;
+  if (na === null || nb === null) return na === nb;
+  if (typeof na === 'number' || typeof nb === 'number') return Number(na) === Number(nb);
+  return String(na).trim() === String(nb).trim();
+}
+
+function setFieldsValues(dep, row) {
+  DEP_CFG[dep].fields.forEach(f => {
+    const el = document.getElementById(f.id);
+    if (!el) return;
+    el.value = row && row[f.col] !== null && row[f.col] !== undefined ? row[f.col] : '';
+    el.dispatchEvent(new Event('input')); // обновить подсказки о норме
+  });
+}
+
+// Пометка "скорректировано" в подписи страницы
+const corrText = {};
+function applyCorrNote(dep, row) {
+  corrText[dep] = row && row.corrected_at ? ` · скорректировано ${fmtDate(row.corrected_at)}` : '';
+  if (dep === 'dik') {
+    const per = getPeriod('dik');
+    const el = document.getElementById('dik-month-label');
+    if (per && el) el.textContent = per.label + corrText.dik;
+  } else {
+    updateWeekLabels();
+  }
+}
+
 // ── SAVE ──────────────────────────────────────────────────────────────────
 async function saveForm(dep) {
-  const w = getWeek();
-  if (!w) { showToast('Выберите неделю', true); return; }
+  const cfg = DEP_CFG[dep];
+  const per = getPeriod(dep);
+  if (!per) { showToast(dep === 'dik' ? 'Выберите месяц' : 'Выберите неделю', true); return; }
   const btn = document.getElementById(dep + '-save-btn');
   btn.disabled = true; btn.textContent = 'Сохранение...';
-
-  let payload = { week_number: w.week_number, year: w.year };
-  if (dep === 'obr') {
-    payload.score = parseFloat(document.getElementById('obr-score').value) || null;
-    payload.total_requests = parseInt(document.getElementById('obr-total').value) || null;
-    payload.expired_requests = parseInt(document.getElementById('obr-expired').value) || null;
-  } else if (dep === 'okk') {
-    payload.rejected = parseInt(document.getElementById('okk-rejected').value) || null;
-    payload.sort_count = parseInt(document.getElementById('okk-sort-count').value) || null;
-    payload.sort_sum = parseFloat(document.getElementById('okk-sort-sum').value) || null;
-    payload.opt_count = parseInt(document.getElementById('okk-opt-count').value) || null;
-    payload.opt_sum = parseFloat(document.getElementById('okk-opt-sum').value) || null;
-    payload.restored = parseInt(document.getElementById('okk-restored').value) || null;
-    payload.no_solution = parseInt(document.getElementById('okk-no-solution').value) || null;
-    payload.rec_new = parseInt(document.getElementById('okk-rec-new').value) || null;
-    payload.rec_in_work = parseInt(document.getElementById('okk-rec-work').value) || null;
-    payload.rec_done = parseInt(document.getElementById('okk-rec-done').value) || null;
-    payload.trainings = parseInt(document.getElementById('okk-training').value) || null;
-    payload.inspections = parseInt(document.getElementById('okk-inspections').value) || null;
-    payload.feedback_total = parseInt(document.getElementById('okk-fb-total').value) || null;
-    payload.feedback_expired = parseInt(document.getElementById('okk-fb-expired').value) || null;
-  } else if (dep === 'sklad') {
-    payload.alt_sum = parseFloat(document.getElementById('sklad-alt-sum').value) || null;
-    payload.contractor_count = parseInt(document.getElementById('sklad-cont-count').value) || null;
-    payload.contractor_sum = parseFloat(document.getElementById('sklad-cont-sum').value) || null;
-    payload.brak_count = parseInt(document.getElementById('sklad-brak-count').value) || null;
-    payload.brak_sum = parseFloat(document.getElementById('sklad-brak-sum').value) || null;
-    payload.cons_count = parseInt(document.getElementById('sklad-cons-count').value) || null;
-    payload.cons_sum = parseFloat(document.getElementById('sklad-cons-sum').value) || null;
-  } else if (dep === 'or') {
-    payload.closed_recs = parseInt(document.getElementById('or-closed').value) || null;
-    payload.errors = parseInt(document.getElementById('or-errors').value) || null;
-    payload.avg_close_hours = parseFloat(document.getElementById('or-avg-time').value) || null;
-    payload.accept_time = parseFloat(document.getElementById('or-accept-time').value) || null;
-    payload.feedback = parseInt(document.getElementById('or-feedback').value) || null;
-    payload.score_speed = parseFloat(document.getElementById('or-score-speed').value) || null;
-    payload.score_lk = parseFloat(document.getElementById('or-score-lk').value) || null;
-    payload.main_reason = document.getElementById('or-reason').value || null;
-  } else if (dep === 'dik') {
-    const dm = getDikMonth(); if (!dm) { showToast('Выберите месяц', true); btn.disabled=false; btn.textContent='Сохранить'; return; }
-    payload = { month_number: dm.month, year: dm.year };
-    payload.rec_pct = parseFloat(document.getElementById('dik-rec-pct').value) || null;
-    payload.rec_money_pct = parseFloat(document.getElementById('dik-rec-money-pct').value) || null;
-    payload.rec_sum = parseFloat(document.getElementById('dik-rec-sum').value) || null;
-    payload.china_total = parseInt(document.getElementById('dik-china-total').value) || null;
-    payload.china_ok = parseInt(document.getElementById('dik-china-ok').value) || null;
+  try {
+    const values = readForm(dep);
+    const { data: existing, error: selErr } = await db.from(cfg.table).select('*').match(per.keys).maybeSingle();
+    if (selErr) throw selErr;
+    if (existing && cfg.fields.every(f => sameVal(existing[f.col], values[f.col]))) {
+      showToast('Изменений нет, данные уже сохранены');
+      return;
+    }
+    const payload = { ...per.keys, ...values };
+    if (per.isPast) payload.corrected_at = new Date().toISOString();
+    const { error } = await db.from(cfg.table).upsert(payload, { onConflict: per.conflict });
+    if (error) throw error;
+    showToast(per.isPast ? '✓ Данные за прошлый период сохранены, дата корректировки записана' : '✓ Данные сохранены');
+    applyCorrNote(dep, per.isPast ? payload : existing);
+    loadHistory(dep);
+  } catch (e) {
+    showToast('Ошибка: ' + (e.message || e), true);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Сохранить';
   }
-
-  const table = tableFor(dep);
-  const { error } = await db.from(table).upsert(payload, { onConflict: 'week_number,year' });
-  btn.disabled = false; btn.textContent = 'Сохранить';
-  if (error) { showToast('Ошибка: ' + error.message, true); return; }
-  showToast('✓ Данные сохранены');
-  loadHistory(dep);
 }
 
 function tableFor(dep) {
@@ -824,46 +959,38 @@ function tableFor(dep) {
 }
 
 // ── LOAD FORM ─────────────────────────────────────────────────────────────
-async function loadForm(dep) {
-  let qb;
-  if (dep === 'dik') {
-    const dm = getDikMonth();
-    if (!dm) { showToast('Выберите месяц', true); return; }
-    qb = db.from(tableFor(dep)).select('*').eq('month_number', dm.month).eq('year', dm.year).single();
-  } else {
-    const w = getWeek();
-    if (!w) { showToast('Выберите неделю', true); return; }
-    qb = db.from(tableFor(dep)).select('*').eq('week_number', w.week_number).eq('year', w.year).single();
+const loadedKey = {};  // для какого периода форма отдела уже загружена
+const formReq = {};
+
+// manual = true: нажата кнопка "Загрузить сохранённое";
+// manual = false: автозагрузка при смене недели/месяца или открытии раздела
+async function loadForm(dep, manual = true) {
+  const cfg = DEP_CFG[dep];
+  const per = getPeriod(dep);
+  if (!per) { if (manual) showToast(dep === 'dik' ? 'Выберите месяц' : 'Выберите неделю', true); return; }
+  const req = (formReq[dep] = (formReq[dep] || 0) + 1);
+  if (!manual) { setFieldsValues(dep, null); applyCorrNote(dep, null); } // не оставляем цифры другой недели
+  const { data, error } = await db.from(cfg.table).select('*').match(per.keys).maybeSingle();
+  if (req !== formReq[dep]) return; // за время запроса выбрали другой период
+  if (error) {
+    loadedKey[dep] = null;
+    showToast('Не удалось загрузить данные: ' + error.message, true);
+    return;
   }
-  const { data, error } = await qb;
-  if (error || !data) { showToast('Данных за эту неделю нет', true); return; }
-  if (dep === 'obr') {
-    setv('obr-score', data.score); setv('obr-total', data.total_requests);
-    setv('obr-expired', data.expired_requests);
-  } else if (dep === 'okk') {
-    setv('okk-rejected', data.rejected); setv('okk-sort-count', data.sort_count);
-    setv('okk-sort-sum', data.sort_sum); setv('okk-restored', data.restored);
-    setv('okk-no-solution', data.no_solution); setv('okk-rec-new', data.rec_new);
-    setv('okk-rec-work', data.rec_in_work); setv('okk-rec-done', data.rec_done);
-    setv('okk-training', data.trainings); setv('okk-inspections', data.inspections);
-    setv('okk-fb-total', data.feedback_total); setv('okk-fb-expired', data.feedback_expired);
-  } else if (dep === 'sklad') {
-    setv('sklad-alt-sum', data.alt_sum); setv('sklad-cont-count', data.contractor_count);
-    setv('sklad-cont-sum', data.contractor_sum); setv('sklad-brak-count', data.brak_count);
-    setv('sklad-brak-sum', data.brak_sum); setv('sklad-cons-count', data.cons_count);
-    setv('sklad-cons-sum', data.cons_sum);
-  } else if (dep === 'or') {
-    setv('or-closed', data.closed_recs); setv('or-errors', data.errors);
-    setv('or-avg-time', data.avg_close_hours); setv('or-accept-time', data.accept_time);
-    setv('or-feedback', data.feedback);
-    setv('or-score-speed', data.score_speed); setv('or-score-lk', data.score_lk);
-    setv('or-reason', data.main_reason);
-  } else if (dep === 'dik') {
-    setv('dik-rec-pct', data.rec_pct); setv('dik-rec-money-pct', data.rec_money_pct);
-    setv('dik-rec-sum', data.rec_sum); setv('dik-china-total', data.china_total);
-    setv('dik-china-ok', data.china_ok);
-  }
-  showToast('Данные загружены');
+  if (!data) { if (manual) showToast('Данных за этот период нет', true); return; }
+  setFieldsValues(dep, data);
+  applyCorrNote(dep, data);
+  if (manual) showToast('Данные загружены');
+}
+
+function ensureFormLoaded(dep) {
+  if (!DEP_CFG[dep]) return;
+  const per = getPeriod(dep);
+  if (!per) return;
+  const key = JSON.stringify(per.keys);
+  if (loadedKey[dep] === key) return; // этот период уже в форме, введённое не затираем
+  loadedKey[dep] = key;
+  loadForm(dep, false);
 }
 
 function setv(id, v) {
@@ -873,47 +1000,42 @@ function setv(id, v) {
 
 // ── HISTORY ───────────────────────────────────────────────────────────────
 async function loadHistory(dep) {
+  const cfg = DEP_CFG[dep];
   const container = document.getElementById(dep + '-history');
-  if (!container) return;
-  const { data } = await db.from(tableFor(dep)).select('*')
-    .order('year', { ascending: false }).order('week_number', { ascending: false }).limit(8);
+  if (!cfg || !container) return;
+  const { data, error } = await db.from(cfg.table).select('*')
+    .order('year', { ascending: false })
+    .order(cfg.monthly ? 'month_number' : 'week_number', { ascending: false })
+    .limit(8);
+  if (error) {
+    container.innerHTML = `<p style="color:var(--err);font-size:13px">Не удалось загрузить историю: ${probEsc(error.message)}
+      <button class="btn" style="margin-left:8px;padding:4px 12px;font-size:12px" onclick="loadHistory('${dep}')">Повторить</button></p>`;
+    return;
+  }
   if (!data || !data.length) { container.innerHTML = '<p style="color:var(--muted);font-size:13px">Данных пока нет</p>'; return; }
 
-  let cols, headers;
-  if (dep === 'obr') {
-    cols = [r => `Нед ${r.week_number}/${r.year}`, r => r.score?.toFixed(2) ?? '—',
-      r => (r.total_requests ?? '—'), r => (r.expired_requests ?? '—'),
-      r => r.total_requests ? ((r.expired_requests / r.total_requests * 100).toFixed(1) + '%') : '—'];
-    headers = ['Неделя', 'Оценка', 'Запросов', 'Просроченных', '% просрочки'];
-  } else if (dep === 'okk') {
-    cols = [r => `Нед ${r.week_number}/${r.year}`, r => r.rejected ?? '—',
-      r => r.restored ?? '—', r => r.rec_new ?? '—', r => r.trainings ?? '—', r => r.inspections ?? '—'];
-    headers = ['Неделя', 'Брак', 'Восстановлено', 'Рекл.новых', 'Обучений', 'Инспекций'];
-  } else if (dep === 'sklad') {
-    cols = [r => `Нед ${r.week_number}/${r.year}`,
-      r => r.alt_sum ? r.alt_sum.toLocaleString('ru') + ' ₽' : '—',
-      r => r.contractor_count ?? '—', r => r.brak_count ?? '—',
-      r => r.cons_count ?? '—', r => r.cons_sum != null ? r.cons_sum.toLocaleString('ru') + ' ₽' : '—'];
-    headers = ['Неделя', 'Сумма Альт', 'Подрядчики', 'Остаток', 'Консол. кол.', 'Консол. руб.'];
-  } else if (dep === 'or') {
-    cols = [r => `Нед ${r.week_number}/${r.year}`, r => r.closed_recs ?? '—',
-      r => r.errors ?? '—', r => r.avg_close_hours ?? '—', r => r.feedback ?? '—'];
-    headers = ['Неделя', 'Закрыто', 'Ошибки', 'Ср.время, ч', 'Обр.связь'];
-  } else if (dep === 'dik') {
-    cols = [r => `${r.month_number}/${r.year}`,
-      r => r.rec_pct != null ? r.rec_pct.toFixed(2) + '%' : '—',
-      r => r.rec_money_pct != null ? r.rec_money_pct.toFixed(2) + '%' : '—',
-      r => r.rec_sum != null ? r.rec_sum.toLocaleString('ru') + ' ₽' : '—',
-      r => r.china_total ?? '—',
-      r => r.china_ok ?? '—'];
-    headers = ['Неделя', 'Доля рекл.', 'Доля в деньгах', 'Сумма рекл.', 'Инспекций', 'Без просрочек'];
-  }
+  const derived = cfg.derived || [];
   let html = '<div style="overflow-x:auto"><table class="hist-table"><thead><tr>';
-  headers.forEach(h => html += `<th>${h}</th>`);
-  html += '</tr></thead><tbody>';
+  html += `<th class="hist-sticky">${cfg.monthly ? 'Месяц' : 'Неделя'}</th>`;
+  cfg.fields.forEach(f => html += `<th>${probEsc(f.short)}</th>`);
+  derived.forEach(d => html += `<th>${probEsc(d.short)}</th>`);
+  html += '<th>Корректировка</th></tr></thead><tbody>';
   data.forEach(r => {
     html += '<tr>';
-    cols.forEach(fn => html += `<td>${fn(r)}</td>`);
+    html += `<td class="hist-sticky">${cfg.monthly ? `${r.month_number}/${r.year}` : `Нед ${r.week_number}/${r.year}`}</td>`;
+    cfg.fields.forEach(f => {
+      const v = fmtVal(f, r[f.col]);
+      html += f.t === 's'
+        ? `<td title="${probEsc(v)}" style="max-width:220px;overflow:hidden;text-overflow:ellipsis">${probEsc(v)}</td>`
+        : `<td>${v}</td>`;
+    });
+    derived.forEach(d => {
+      const v = d.calc(r);
+      html += `<td>${v === null ? '—' : v.toFixed(1) + '%'}</td>`;
+    });
+    html += r.corrected_at
+      ? `<td><span class="badge badge-warn" style="margin-left:0" title="Дата, когда данные за этот период были заполнены или исправлены после его окончания">${fmtDate(r.corrected_at)}</span></td>`
+      : '<td style="color:var(--muted)">—</td>';
     html += '</tr>';
   });
   html += '</tbody></table></div>';
@@ -1256,6 +1378,7 @@ setDefaultWeek();
 setDefaultDikMonth();
 updateWeekLabels();
 loadHistory('obr');
+ensureFormLoaded('obr');
 
 function getDikMonth() {
   const v = document.getElementById('dik-month-input').value;
@@ -1324,6 +1447,7 @@ document.getElementById('dik-china-ok').addEventListener('input', function() {
 document.getElementById('dik-month-input').addEventListener('change', function() {
   const dm = getDikMonth();
   if (dm) document.getElementById('dik-month-label').textContent = 'Метрики за ' + dm.label;
+  ensureFormLoaded('dik');
 });
 
 document.getElementById('dik-china-total').addEventListener('input', function() {
@@ -2193,6 +2317,132 @@ async function exportProblems() {
     btn.disabled = false;
   }
 }
+
+// ══════════════════════════════════════════════════════════
+// АНАЛИЗ С ПОМОЩЬЮ ИИ: готовый текст запроса для GPT / Claude
+// ══════════════════════════════════════════════════════════
+const AI_NORMS = {
+  obr: [
+    'Оценка клиентов: не ниже 4.8',
+    'Просроченных запросов: не более 1% от количества запросов'
+  ],
+  okk: [],
+  sklad: [
+    'Сумма остатка "Альт": порог контроля 500 000 руб. (превышение требует контроля)'
+  ],
+  or: [
+    'Ошибок при разборе рекламаций: не более 1% от количества завершённых задач',
+    'Среднее время закрытия: не более 1200 сек (20 мин)',
+    'Среднее время принятия: не более 1200 сек (20 мин)',
+    'Оценка скорости обработки: не ниже 4.8',
+    'Оценка удобства ЛК: не ниже 4.8'
+  ]
+};
+
+function buildAiPromptText(dep, rows) {
+  const cfg = DEP_CFG[dep];
+  const norms = AI_NORMS[dep] || [];
+  const derived = cfg.derived || [];
+  const lines = rows.map(r => {
+    const parts = cfg.fields.map(f => `${f.label}: ${fmtVal(f, r[f.col])}`);
+    derived.forEach(d => {
+      const v = d.calc(r);
+      parts.push(`${d.label}: ${v === null ? '—' : v.toFixed(1) + '%'}`);
+    });
+    const mark = r.corrected_at ? ` (данные скорректированы ${fmtDate(r.corrected_at)})` : '';
+    return `Неделя ${r.week_number}/${r.year}${mark}\n${parts.join('; ')}`;
+  });
+  return [
+    `Ты — аналитик по качеству и операционным процессам. Ниже еженедельные метрики подразделения "${cfg.title}" за последние ${rows.length} нед. (от старых к новым). Проанализируй их.`,
+    '',
+    'Нормы и пороги:',
+    norms.length
+      ? norms.map(n => '- ' + n).join('\n')
+      : '- Для этого подразделения нормы в трекере не заданы: оценивай динамику и резкие изменения, нормы не придумывай.',
+    '',
+    'Данные ("—" значит, что значение не внесено; если между номерами недель пропуск, данные за неделю не вносились):',
+    '',
+    lines.join('\n\n'),
+    '',
+    'Что нужно сделать:',
+    '1. Кратко опиши динамику (3–5 предложений): что улучшилось, что ухудшилось.',
+    '2. Перечисли отклонения от норм с номерами недель.',
+    '3. Назови возможные причины. Это гипотезы: прямо отметь, что их нужно проверить.',
+    '4. Дай 3–5 конкретных рекомендаций в порядке приоритета: что сделать и как проверить результат.',
+    '5. Укажи, каких данных не хватает для более точных выводов.',
+    '',
+    'Отвечай на русском, без общих фраз, опирайся только на числа выше.'
+  ].join('\n');
+}
+
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+  document.body.appendChild(ta);
+  ta.focus(); ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  document.body.removeChild(ta);
+  return ok;
+}
+
+async function copyAiPrompt(dep) {
+  const cfg = DEP_CFG[dep];
+  const n = parseInt(document.getElementById(dep + '-ai-weeks').value, 10) || 8;
+  const btn = document.getElementById(dep + '-ai-btn');
+  btn.disabled = true;
+  try {
+    const { data, error } = await db.from(cfg.table).select('*')
+      .order('year', { ascending: false }).order('week_number', { ascending: false }).limit(n);
+    if (error) { showToast('Не удалось получить данные: ' + error.message, true); return; }
+    if (!data || !data.length) { showToast('Нет данных для анализа', true); return; }
+    const text = buildAiPromptText(dep, data.slice().reverse());
+    document.getElementById(dep + '-ai-text').value = text;
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; } catch (e) { ok = fallbackCopy(text); }
+    if (ok) showToast('Текст скопирован. Вставьте его в чат с ИИ (Ctrl+V)');
+    else {
+      document.getElementById(dep + '-ai-details').open = true;
+      showToast('Не удалось скопировать автоматически. Скопируйте текст вручную из поля ниже', true);
+    }
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderAiBlock(dep) {
+  const box = document.getElementById('ai-block-' + dep);
+  if (!box) return;
+  box.innerHTML = `<div class="card">
+    <div class="card-title">Анализ с помощью ИИ</div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="font-size:13px;color:var(--muted)">Период анализа:</span>
+      <select id="${dep}-ai-weeks" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text)">
+        <option value="4">4 недели</option>
+        <option value="8" selected>8 недель</option>
+        <option value="12">12 недель</option>
+        <option value="26">26 недель</option>
+      </select>
+      <button class="btn btn-primary" id="${dep}-ai-btn" onclick="copyAiPrompt('${dep}')">📋 Скопировать для ИИ</button>
+    </div>
+    <div style="margin-top:14px;padding:12px 14px;background:var(--bg);border-radius:var(--radius-sm);font-size:13px;line-height:1.5">
+      <div style="font-weight:600;margin-bottom:6px">Как пользоваться</div>
+      <ol style="padding-left:20px">
+        <li>Выберите период и нажмите "Скопировать для ИИ". Трекер соберёт метрики отдела и нормы в готовый текст запроса и скопирует его.</li>
+        <li>Откройте ИИ-ассистента, к которому у вас есть доступ (например, ChatGPT или Claude) и начните новый чат.</li>
+        <li>Вставьте текст в поле ввода (Ctrl+V, на телефоне: долгое нажатие и "Вставить") и отправьте.</li>
+        <li>Прочитайте ответ. Если нужно, задайте уточняющий вопрос, например: "Что из этого сделать в первую очередь?"</li>
+      </ol>
+      <div style="margin-top:8px;color:var(--muted)">ИИ видит только эти цифры и не знает причин, поэтому его выводы нужно проверять. Метрики отдела уходят во внешний сервис: делайте это, только если правила компании это разрешают.</div>
+    </div>
+    <details id="${dep}-ai-details" style="margin-top:10px">
+      <summary style="cursor:pointer;font-size:12px;color:var(--muted)">Показать текст запроса</summary>
+      <textarea id="${dep}-ai-text" readonly rows="10" style="width:100%;margin-top:8px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:inherit;background:var(--surface);color:var(--text)"></textarea>
+    </details>
+  </div>`;
+}
+['obr', 'okk', 'sklad', 'or'].forEach(renderAiBlock);
 </script>
 </body>
 </html>
